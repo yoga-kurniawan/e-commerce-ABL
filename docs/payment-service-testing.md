@@ -1,6 +1,22 @@
-# Hasil verifikasi Payment — tahap 1 domain
+# Hasil verifikasi Payment — tahap 1 dan 2
 
-Tanggal: 29 Oktober 2026. Ini hasil unit tests domain, bukan verifikasi aplikasi Payment lengkap.
+Tanggal: 29 Oktober 2026. Ini hasil unit tests domain dan tipe aplikasi, bukan verifikasi aplikasi Payment lengkap.
+
+## Verifikasi terbaru — tahap 2 commands dan ports
+
+Command aktual pada 22:53 WIB:
+
+```powershell
+& 'C:\Users\USER\.m2\wrapper\dists\apache-maven-3.9.6-bin\3311e1d4\apache-maven-3.9.6\bin\mvn.cmd' -o '-Dmaven.repo.local=C:\Users\USER\.m2\repository' -pl services/payment-service -am '-Dtest=PaymentTest,OrderSnapshotTest,PaymentCommandsTest,PaymentApplicationTypesTest' test
+```
+
+Hasil: **BUILD SUCCESS**, 62 tests, 0 failures, 0 errors, 0 skipped, kompilasi release 17. Rinciannya: PaymentTest 25, OrderSnapshotTest 5, PaymentCommandsTest 27, PaymentApplicationTypesTest 5. Pengujian memakai cache Maven offline dan tidak menjalankan generated context test.
+
+Tests baru mencakup field command wajib, enum hasil final, reference nonblank tanpa trim, batas/pola/case key, canonical payload dan fingerprint SHA-256 yang diketahui, perbedaan payload vs key, snapshot replay tetap PENDING meskipun domain terkini SUCCESS, penolakan respons error sebagai replay sukses, hasil create harus tersimpan/PENDING, dan validasi token/lease serta outcome yang tidak ambigu.
+
+Tidak ada tests yang sekadar memanggil mock interface untuk mengklaim atomicity. Lima output ports baru masih berupa kontrak: PaymentStore, OrderLookup, IdempotencyStore, PaymentCreationCommitter, dan CreationResponseEncoder. Tidak ada implementasi repository/client/transaksi/locking pada tahap 2. Penyimpanan snapshot, validitas JSON hasil encoder, unknown-field detection pada input HTTP, TTL, dan recovery nyata masih harus diuji saat adapter/use case tersedia. Inspeksi dependensi source menemukan tidak ada import Spring/JPA/HTTP client pada usecase tahap ini.
+
+## Riwayat verifikasi tahap 1
 
 ## Command dan hasil
 

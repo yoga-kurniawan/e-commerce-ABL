@@ -18,7 +18,13 @@ Pertahankan Java 17, dependency management parent POM, ID numerik Long, dan pack
 | adapter.inbound.rest.simulator | DevelopmentPaymentResultController | Pemicu simulator yang dibatasi; memanggil use case hasil |
 | adapter.exception | GlobalExceptionHandler, ApiError | Mapping exception ke `{code,message}` |
 
-Nama port dapat dipecah saat tahap 2 jika kontrak terlalu besar. `CreationResponseEncoder` menerima snapshot hasil aplikasi dan mengembalikan teks JSON deterministik; adapter HTTP mengimplementasikan serialisasinya. Domain tidak mengenal response HTTP. Metadata replay (kode integer, content type, body teks) adalah catatan operasi aplikasi, bukan ResponseEntity atau domain Payment.
+Tahap 2 memecah kebutuhan finalisasi ke output port `PaymentCreationCommitter.commit(claim, order)` yang mengembalikan hasil create tersimpan. Implementasi transaksi bean terpisah tetap pekerjaan tahap berikutnya. `PaymentStore` menyediakan findById serta kebutuhan mutasi reference/hasil secara atomik; tidak mengekspos save biasa yang dapat melewati finalisasi Payment+idempotency.
+
+`CreationResponseEncoder` menerima Payment hasil create dan mengembalikan `StoredCreationResponse` (201, application/json, teks body awal). Adapter HTTP nantinya mengimplementasikan serialisasi deterministik, dipanggil di dalam finalisasi lokal tanpa I/O remote. Domain tidak mengenal response HTTP. Metadata replay adalah catatan operasi aplikasi, bukan ResponseEntity atau domain Payment. Validasi sintaks/schema JSON tetap tugas encoder/tests adapter, bukan parsing JSON di core.
+
+Tipe aplikasi berada di `usecase.model`: IdempotencyKey (scope operasi tetap), IdempotencyClaim (request, owner token, leaseUntil), IdempotencyClaimResult (Claimed/Replayed/InProgress/PayloadMismatch), IdempotencyLookupResult (Completed/Processing/Missing/PayloadMismatch), dan CreatePaymentResult (Created/Replayed). CreatePaymentCommand memiliki canonicalPayload/fingerprint serta pembandingan nilai payload; key tidak masuk fingerprint. Tipe ini tidak menentukan sendiri clock database, transaksi, atau keberhasilan locking.
+
+`IdempotencyStore` memiliki operasi claim atomik, inspect tanpa mutasi untuk rekonsiliasi, releaseAfterConfirmedRollback dengan verifikasi token/state, serta cleanup hasil selesai expired. Missing/Processing pada inspect bukan bukti rollback; kegagalan membaca database tidak boleh diam-diam menjadi Missing. Port tidak menjamin FIFO. Implementasinya wajib diuji dengan database nyata pada tahap adapter.
 
 ## 2. Key, input, dan canonicalization
 
@@ -112,4 +118,4 @@ Simbol exception transport/SQL dipetakan adapter; core memakai exception aplikas
 - Mapping JPA/JSON mempertahankan pecahan; tests menegaskan reference dan state terminal serta no-op final identik.
 - Simulator benar-benar tidak ada pada profil/default yang tidak diizinkan, prod override, flag false, dan token invalid; tes startup memeriksa loopback/token.
 
-Verifikasi tahap 0: kontrak publik dan simulator telah lolos validator OpenAPI; ini validasi spesifikasi, bukan bukti runtime. Domain tahap 1 kemudian diimplementasikan dengan 30 unit tests lulus; lihat [hasil tests](payment-service-testing.md). Klaim, transaksi, locking, mapping persistence, client, dan endpoint belum memiliki bukti runtime. Urutan berikutnya adalah tahap 2 (command/port), lalu migrasi, repository, adapter, use case, HTTP, handler, dan verifikasi gabungan.
+Verifikasi tahap 0: kontrak publik dan simulator telah lolos validator OpenAPI; ini validasi spesifikasi, bukan bukti runtime. Domain tahap 1 dan command/port/tipe aplikasi tahap 2 diimplementasikan dengan 62 unit tests gabungan lulus; lihat [hasil tests](payment-service-testing.md). Klaim, transaksi, locking, mapping persistence, client, dan endpoint belum memiliki implementasi/bukti runtime. Urutan berikutnya adalah tahap 3 (migrasi/JPA), lalu repository, adapter, use case, HTTP, handler, dan verifikasi gabungan.

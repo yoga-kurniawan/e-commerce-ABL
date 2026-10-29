@@ -2,7 +2,7 @@
 
 Dokumen ini adalah rencana pekerjaan, bukan hasil implementasi.
 
-Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain) selesai dengan 30 unit tests lulus; rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 2–10 belum dikerjakan; transaksi/locking serta endpoint belum diimplementasikan.
+Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain) dan tahap 2 (commands, ports, tipe aplikasi) selesai dengan 62 unit tests gabungan lulus; rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 3–10 belum dikerjakan; transaksi/locking serta endpoint belum diimplementasikan.
 
 Acuan urutan: bagian 4 dan 5 pada `.codex/alur-pekerjaan-developer-setiap-service.md`. Acuan perilaku: [decisions.md](decisions.md), khususnya DEC-012 sampai DEC-017, [business-rules.md](business-rules.md), dan [OpenAPI](../specs/openapi.yaml). Alur lama dipertahankan; idempotency dan simulator ditambahkan sesuai keputusan terbaru. Rujukan historis di `.codex` tidak menggantikan kontrak/keputusan terbaru.
 
