@@ -10,7 +10,7 @@
 
 Schema sumber dan narasi tidak selalu merinci hal yang sama. Dokumen ini menunjukkan perbedaannya; file OpenAPI tidak diperketat atau diperluas diam-diam.
 
-Semua endpoint pada tabel memakai prefix `/api/v1`. Versi API 1.0.0 dan OpenAPI 3.0.3 berasal dari laporan h. 8 dan 16.
+Semua endpoint pada tabel memakai prefix `/api/v1`. Versi API 1.0.0 dan OpenAPI 3.0.3 berasal dari laporan h. 8 dan 16. Kontrak project diperluas menjadi 18 operasi pada 10 path melalui keputusan OPEN-001; baseline laporan memuat 17 operasi pada 9 path.
 
 ## 2. Product Service
 
@@ -41,6 +41,7 @@ Belum dirinci: nama kosong/panjang nama, presisi/skala mata uang, pembulatan, da
 
 | Method | Path | Input utama | Sukses | Error yang dicantumkan |
 |---|---|---|---|---|
+| POST | `/carts` | customerId wajib; rancangan kontrak awal OPEN-001 | 201, Cart kosong dengan ID backend | 400 |
 | GET | `/carts/{cartId}` | cartId integer | 200, Cart | 404 |
 | POST | `/carts/{cartId}/items` | productId, quantity | 201, Cart pada YAML | 400, 404 |
 | PUT | `/carts/{cartId}/items/{productId}` | quantity wajib | 200, contoh item diperbarui | 400, 404, 409 |
@@ -58,7 +59,13 @@ Ketentuan sumber, h. 13–14, 22–23, 31–34, 40–42:
 
 Contoh naratif respons update item memuat cartId, productId, quantity, dan subtotal. YAML tambahannya baru menuliskan deskripsi response 200, belum schema/content lengkap.
 
-Belum diputuskan: cara membuat Cart pertama, relasi kepemilikan Cart ke customer, perilaku POST produk duplikat, masa berlaku Cart, penyimpanan harga, dan kapan stok benar-benar dipesan. Tidak ada endpoint POST `/carts` pada 17 operasi awal.
+Keputusan project pada 29 Oktober 2026:
+
+- **OPEN-001 B:** Cart dibuat melalui POST `/carts`; backend menghasilkan ID, items awal kosong, dan total 0. Client menggunakan ID respons untuk operasi berikutnya. Endpoint ini merupakan perluasan atas baseline laporan. Request awal memakai customerId sebagai referensi pelanggan; identitas dan otorisasi belum ditetapkan.
+- **OPEN-002 A:** POST produk yang sudah ada menambah quantity pada item yang sama; validasi stok memakai quantity akhir. POST item tetap membutuhkan Cart yang sudah ada.
+- **OPEN-003 B:** harga satuan disimpan dari backend Product saat produk masuk Cart dan digunakan saat checkout. Perubahan harga katalog tidak otomatis mengganti harga item yang tersimpan.
+
+Belum diputuskan: satu/beberapa Cart aktif per customer, bukti kepemilikan Cart, masa berlaku Cart/harga, aturan harga saat produk ditambahkan ulang setelah perubahan harga, serta kapan stok benar-benar dipesan. Penyimpanan harga satuan diperlukan; cara mengekspos harga tersebut kepada Order masih perlu diputuskan.
 
 ## 4. Order Service
 
@@ -77,7 +84,7 @@ Ketentuan sumber, h. 14–15, 23, 27–28, 34–35, 43:
 - Total dan status pembayaran tidak boleh diubah bebas melalui PATCH ini.
 - PUT dan DELETE Order tidak disediakan pada rancangan awal.
 
-Belum diputuskan: status persis yang boleh mengubah alamat, Cart kosong, validasi kepemilikan customer, harga checkout, pembekuan Cart, snapshot internal, stock reservation, dan penanganan request create berulang. Policy hanya-PENDING adalah usulan yang perlu disepakati, bukan ketentuan eksplisit laporan.
+Harga checkout mengikuti harga tersimpan pada Cart (OPEN-003 B), bukan harga katalog terbaru. Belum diputuskan: status persis yang boleh mengubah alamat, Cart kosong, validasi kepemilikan customer, masa berlaku harga, pembekuan Cart, snapshot internal, stock reservation, dan penanganan request create berulang. Policy hanya-PENDING adalah usulan yang perlu disepakati, bukan ketentuan eksplisit laporan.
 
 Rancangan APS V3 mengusulkan snapshot item/harga di Order dan lookup Product untuk field yang tidak tersedia lengkap pada Cart. Jangan menganggap usulan model internal ini sudah menjadi schema respons publik.
 
@@ -105,7 +112,7 @@ Rancangan project mengusulkan amount diperoleh backend dari total Order. Policy 
 
 | Temuan | Sumber | Tindak lanjut |
 |---|---|---|
-| Endpoint membuat Cart belum ada | Daftar h. 11 dan 27 | Pilih fixture lokal atau desain perluasan kontrak |
+| Endpoint membuat Cart tidak ada pada baseline laporan | Daftar h. 11 dan 27 | OPEN-001 B diterima: kontrak project menambahkan POST `/carts`; implementasi dan tests belum tersedia |
 | shippingAddress tampil pada contoh PATCH, belum ada di schema Order awal | h. 23, 35, 43 | Selaraskan schema bila field dikembalikan sebagai kontrak terdokumentasi |
 | transactionReference tampil pada contoh PATCH, belum ada di schema Payment awal | h. 24, 36, 44 | Selaraskan schema bila field dikembalikan |
 | Response 200 tambahan Cart/Order/Payment belum memiliki content/schema | YAML h. 41–44 | Gunakan narasi sebagai bahan pembahasan; lengkapi kontrak melalui keputusan eksplisit |

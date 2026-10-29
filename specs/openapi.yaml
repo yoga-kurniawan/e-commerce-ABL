@@ -165,6 +165,33 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: 'Produk tidak dapat dihapus karena masih digunakan'
+  /carts:
+    post:
+      tags:
+        - 'Carts'
+      summary: 'Membuat keranjang kosong'
+      description: 'Backend menghasilkan ID Cart. customerId merupakan referensi pelanggan, bukan bukti identitas terautentikasi. Kebijakan Cart aktif per pelanggan dan idempotency belum ditetapkan; endpoint ini belum menjanjikan pengembalian Cart yang sudah ada.'
+      operationId: 'createCart'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartInput'
+      responses:
+        '201':
+          description: 'Keranjang kosong berhasil dibuat dengan ID dari backend'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+              example:
+                id: 27
+                customerId: 101
+                items: []
+                total: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
   /carts/{cartId}:
     get:
       tags:
@@ -191,6 +218,7 @@ paths:
       tags:
         - 'Carts'
       summary: 'Menambahkan produk ke keranjang'
+      description: 'Cart harus sudah ada. Jika produk sudah ada dalam Cart, quantity request ditambahkan pada quantity item tersebut; validasi stok menggunakan quantity akhir. Harga disimpan dari Product saat produk pertama masuk Cart untuk dipakai saat checkout. Aturan harga untuk penambahan ulang sesudah perubahan harga katalog masih perlu diputuskan.'
       operationId: 'addCartItem'
       parameters:
         - name: 'cartId'
@@ -493,12 +521,25 @@ components:
           type: 'integer'
           minimum: 0
           example: 20
+    CartInput:
+      type: 'object'
+      required:
+        - 'customerId'
+      properties:
+        customerId:
+          type: 'integer'
+          description: 'Referensi pelanggan; tidak membuktikan identitas terautentikasi. Cara validasi kepemilikan mengikuti keputusan autentikasi/otorisasi berikutnya.'
+          example: 101
     Cart:
       type: 'object'
       properties:
         id:
           type: 'integer'
           example: 10
+        customerId:
+          type: 'integer'
+          description: 'Referensi pelanggan yang terkait dengan Cart.'
+          example: 101
         items:
           type: 'array'
           items:

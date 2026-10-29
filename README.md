@@ -49,10 +49,12 @@ Port berikut merupakan konfigurasi **development langsung pada host**, bukan sta
 | Service | Port lokal | Database | Fungsi | Operasi |
 |---|---:|---|---|---:|
 | `product-service` | 8081 | `product_db` | Katalog, harga, stok, pembaruan dan penghapusan produk | 6 |
-| `cart-service` | 8082 | `cart_db` | Membaca Cart dan mengelola item | 5 |
+| `cart-service` | 8082 | `cart_db` | Membuat/membaca Cart dan mengelola item | 6 |
 | `order-service` | 8083 | `order_db` | Membuat/membaca pesanan dan mengubah atribut yang diizinkan | 3 |
 | `payment-service` | 8084 | `payment_db` | Membuat/membaca permintaan pembayaran dan mengubah metadata yang diizinkan | 3 |
-| **Total** | | | **9 path publik** | **17** |
+| **Total** | | | **10 path publik** | **18** |
+
+Kontrak diperluas dari baseline 17 operasi pada 9 path melalui keputusan OPEN-001: POST `/api/v1/carts` membuat Cart kosong dengan ID dari backend. Penambahan kontrak belum membuktikan endpoint sudah diimplementasikan.
 
 Base URL publik yang direncanakan adalah `http://localhost:8080/api/v1` melalui pintu masuk API. Saat gateway belum berjalan, gunakan port service masing-masing. Dalam Kubernetes, aplikasi dapat memakai port container 8080 pada Pod berbeda.
 
@@ -91,7 +93,7 @@ Order   → Product       : memperoleh data snapshot/validasi checkout pada ranc
 Payment → Order         : membaca informasi pesanan
 ```
 
-Rancangan Order ke Product diperlukan karena respons Cart awal tidak menyediakan nama/harga satuan produk secara lengkap. Policy harga checkout dan stock reservation belum selesai ditetapkan.
+Harga checkout mengikuti harga yang disimpan saat produk masuk Cart (OPEN-003). Lookup Product dapat digunakan untuk data produk/validasi, tetapi tidak menggantikan harga Cart dengan harga katalog terbaru. Cara membawa harga satuan tersimpan dari Cart ke Order dan stock reservation masih perlu diselesaikan.
 
 Panggilan antarlayanan dilakukan melalui REST adapter yang mengimplementasikan output port. Timeout/kegagalan dependency harus ditangani secara eksplisit. Transaksi SQL satu service tidak otomatis membatalkan perubahan service lain.
 
@@ -248,7 +250,7 @@ Beberapa bagian kontrak API masih perlu dilengkapi, terutama content respons tam
 
 ## Flow pengujian alur utama
 
-**Prasyarat:** empat endpoint bisnis sudah dibuat, database tersedia, dependency URL benar, dan tersedia Cart fixture kosong. Angka customerId 101/cartId 10 berikut hanya contoh data uji, bukan akun atau seed yang sudah disediakan. Tidak ada endpoint create Cart atau akun default dalam kontrak awal.
+**Prasyarat:** endpoint bisnis terkait sudah dibuat, database tersedia, dan dependency URL benar. customerId 101 berikut hanya referensi pelanggan untuk pengujian, bukan akun atau bukti identitas terautentikasi. Cart dibuat melalui POST `/carts` sesuai perluasan kontrak OPEN-001.
 
 Jalankan dari terminal pengujian dengan `curl` dan `jq`. Semua contoh respons/status di bagian ini merupakan hasil yang diharapkan untuk fixture yang sesuai, bukan hasil pengukuran.
 
@@ -279,19 +281,24 @@ curl --fail --silent --show-error \
 
 Target HTTP: **200**, atribut produk sesuai data yang disimpan.
 
-### 3. Tambahkan item ke Cart fixture
+### 3. Buat Cart kosong, lalu tambahkan item
 
-Pastikan Cart ID berikut memang ada dan kosong sebelum menjalankan skenario:
+Ambil ID Cart dari respons create, kemudian gunakan untuk operasi item:
 
 ```bash
-CART_ID=10
+CART_JSON=$(curl --fail --silent --show-error \
+  -X POST "$CART_URL/carts" \
+  -H 'Content-Type: application/json' \
+  --data '{"customerId":101}')
+printf '%s\n' "$CART_JSON" | jq
+CART_ID=$(printf '%s\n' "$CART_JSON" | jq -er '.id')
 curl --fail --silent --show-error \
   -X POST "$CART_URL/carts/$CART_ID/items" \
   -H 'Content-Type: application/json' \
   --data "{\"productId\":$PRODUCT_ID,\"quantity\":2}" | jq
 ```
 
-Target HTTP: **201**. Untuk fixture tanpa perubahan harga, satu item quantity 2 dengan harga 350000 menghasilkan subtotal/total 700000. Penambahan item tidak otomatis membuktikan stok telah direservasi.
+Target HTTP: **201** untuk create Cart (items kosong, total 0) dan tambah item. Satu item quantity 2 dengan harga tersimpan 350000 menghasilkan subtotal/total 700000. POST produk yang sama menambah quantity pada item yang sama. Penambahan item tidak otomatis membuktikan stok telah direservasi.
 
 ### 4. Buat pesanan
 
@@ -420,7 +427,7 @@ Setelah datasource/profile pengujian siap:
 ./mvnw verify
 ```
 
-Keberhasilan command dengan nol tests tidak membuktikan fitur telah diuji. Integration tests hanya dijalankan otomatis jika lifecycle/plugin-nya dikonfigurasi. Lihat [testing.md](docs/testing.md) untuk matriks 17 operasi dan pencatatan hasil.
+Keberhasilan command dengan nol tests tidak membuktikan fitur telah diuji. Integration tests hanya dijalankan otomatis jika lifecycle/plugin-nya dikonfigurasi. Lihat [testing.md](docs/testing.md) untuk matriks 18 operasi dan pencatatan hasil.
 
 Bukti demo yang dapat dikumpulkan setelah implementasi tersedia:
 
