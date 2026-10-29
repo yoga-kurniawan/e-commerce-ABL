@@ -1,0 +1,39 @@
+# Maven build output; keep POMs, wrapper scripts, and .mvn/wrapper tracked.
+**/target/
+
+# Local environment values; keep safe examples.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local credentials/secret files; keep templates with placeholder values.
+**/secrets.local.*
+**/credentials.local.*
+/.secrets/
+/.kube/
+/.minikube/
+
+# IDE metadata specific to a developer.
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+
+# Downloaded local tools and rendered deployment output.
+/.tools/
+/rendered/
+
+# Runtime logs, JVM dumps, and generated test/load output.
+*.log
+*.hprof
+hs_err_pid*
+/logs/
+/tests/load/results/
+/tests/postman/results/
+
+# Operating-system metadata.
+.DS_Store
+Thumbs.db
+Desktop.ini

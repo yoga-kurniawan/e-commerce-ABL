@@ -1,0 +1,629 @@
+openapi: '3.0.3'
+info:
+  title: 'E-Commerce Microservices API'
+  description: 'Dokumentasi API untuk sistem e-commerce berbasis microservices yang mencakup katalog produk, keranjang belanja, pemesanan, dan pembayaran.'
+  version: '1.0.0'
+servers:
+  - url: 'http://localhost:8080/api/v1'
+    description: 'Development server melalui API Gateway'
+tags:
+  - name: 'Products'
+    description: 'Pengelolaan katalog produk'
+  - name: 'Carts'
+    description: 'Pengelolaan keranjang belanja'
+  - name: 'Orders'
+    description: 'Pengelolaan pesanan'
+  - name: 'Payments'
+    description: 'Pengelolaan pembayaran'
+paths:
+  /products:
+    get:
+      tags:
+        - 'Products'
+      summary: 'Mendapatkan daftar produk'
+      operationId: 'getProducts'
+      responses:
+        '200':
+          description: 'Daftar produk berhasil diambil'
+          content:
+            application/json:
+              schema:
+                type: 'array'
+                items:
+                  $ref: '#/components/schemas/Product'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+        - 'Products'
+      summary: 'Menambahkan produk baru'
+      operationId: 'createProduct'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '201':
+          description: 'Produk berhasil dibuat'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /products/{productId}:
+    get:
+      tags:
+        - 'Products'
+      summary: 'Mendapatkan detail produk'
+      operationId: 'getProductById'
+      parameters:
+        - name: 'productId'
+          in: 'path'
+          required: true
+          description: 'ID produk'
+          schema:
+            type: 'integer'
+      responses:
+        '200':
+          description: 'Detail produk berhasil diambil'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - 'Products'
+      summary: 'Memperbarui seluruh informasi produk'
+      operationId: 'replaceProduct'
+      parameters:
+        - name: 'productId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: 'Produk berhasil diperbarui'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - 'Products'
+      summary: 'Memperbarui sebagian informasi produk'
+      operationId: 'updateProduct'
+      parameters:
+        - name: 'productId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: 'object'
+              properties:
+                name:
+                  type: 'string'
+                price:
+                  type: 'number'
+                  format: 'double'
+                  minimum: 0
+                stock:
+                  type: 'integer'
+                  minimum: 0
+              minProperties: 1
+      responses:
+        '200':
+          description: 'Produk berhasil diperbarui'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - 'Products'
+      summary: 'Menghapus produk dari katalog'
+      operationId: 'deleteProduct'
+      parameters:
+        - name: 'productId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      responses:
+        '204':
+          description: 'Produk berhasil dihapus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'Produk tidak dapat dihapus karena masih digunakan'
+  /carts/{cartId}:
+    get:
+      tags:
+        - 'Carts'
+      summary: 'Mendapatkan isi keranjang'
+      operationId: 'getCart'
+      parameters:
+        - name: 'cartId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      responses:
+        '200':
+          description: 'Keranjang berhasil diambil'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /carts/{cartId}/items:
+    post:
+      tags:
+        - 'Carts'
+      summary: 'Menambahkan produk ke keranjang'
+      operationId: 'addCartItem'
+      parameters:
+        - name: 'cartId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartItemInput'
+      responses:
+        '201':
+          description: 'Produk berhasil ditambahkan ke keranjang'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /orders:
+    post:
+      tags:
+        - 'Orders'
+      summary: 'Membuat pesanan baru'
+      operationId: 'createOrder'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderInput'
+      responses:
+        '201':
+          description: 'Pesanan berhasil dibuat'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /orders/{orderId}:
+    get:
+      tags:
+        - 'Orders'
+      summary: 'Mendapatkan detail pesanan'
+      operationId: 'getOrder'
+      parameters:
+        - name: 'orderId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      responses:
+        '200':
+          description: 'Detail pesanan berhasil diambil'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - 'Orders'
+      summary: 'Memperbarui atribut pesanan yang diizinkan'
+      operationId: 'updateOrder'
+      parameters:
+        - name: 'orderId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: 'object'
+              properties:
+                shippingAddress:
+                  type: 'string'
+              minProperties: 1
+      responses:
+        '200':
+          description: 'Pesanan berhasil diperbarui'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'Perubahan tidak diizinkan'
+  /payments:
+    post:
+      tags:
+        - 'Payments'
+      summary: 'Membuat permintaan pembayaran'
+      operationId: 'createPayment'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentInput'
+      responses:
+        '201':
+          description: 'Permintaan pembayaran berhasil dibuat'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: 'Pesanan tidak ditemukan'
+  /payments/{paymentId}:
+    get:
+      tags:
+        - 'Payments'
+      summary: 'Mendapatkan status pembayaran'
+      operationId: 'getPayment'
+      parameters:
+        - name: 'paymentId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      responses:
+        '200':
+          description: 'Status pembayaran berhasil diambil'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - 'Payments'
+      summary: 'Memperbarui atribut pembayaran yang diizinkan'
+      operationId: 'updatePayment'
+      parameters:
+        - name: 'paymentId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: 'object'
+              properties:
+                transactionReference:
+                  type: 'string'
+              minProperties: 1
+      responses:
+        '200':
+          description: 'Data pembayaran berhasil diperbarui'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'Perubahan tidak diizinkan'
+  /carts/{cartId}/items/{productId}:
+    put:
+      tags:
+        - 'Carts'
+      summary: 'Mengganti data item keranjang'
+      operationId: 'replaceCartItem'
+      parameters:
+        - name: 'cartId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+        - name: 'productId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: 'object'
+              required:
+                - 'quantity'
+              properties:
+                quantity:
+                  type: 'integer'
+                  minimum: 1
+      responses:
+        '200':
+          description: 'Item keranjang berhasil diperbarui'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'Jumlah melebihi stok yang tersedia'
+    patch:
+      tags:
+        - 'Carts'
+      summary: 'Memperbarui sebagian data item keranjang'
+      operationId: 'updateCartItem'
+      parameters:
+        - name: 'cartId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+        - name: 'productId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: 'object'
+              properties:
+                quantity:
+                  type: 'integer'
+                  minimum: 1
+              minProperties: 1
+      responses:
+        '200':
+          description: 'Item keranjang berhasil diperbarui'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'Perubahan bertentangan dengan stok'
+    delete:
+      tags:
+        - 'Carts'
+      summary: 'Menghapus item dari keranjang'
+      operationId: 'deleteCartItem'
+      parameters:
+        - name: 'cartId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+        - name: 'productId'
+          in: 'path'
+          required: true
+          schema:
+            type: 'integer'
+      responses:
+        '204':
+          description: 'Item berhasil dihapus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  schemas:
+    Product:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          example: 1
+        name:
+          type: 'string'
+          example: 'Keyboard Mechanical'
+        price:
+          type: 'number'
+          format: 'double'
+          example: 350000
+        stock:
+          type: 'integer'
+          example: 20
+    ProductInput:
+      type: 'object'
+      required:
+        - 'name'
+        - 'price'
+        - 'stock'
+      properties:
+        name:
+          type: 'string'
+          example: 'Keyboard Mechanical'
+        price:
+          type: 'number'
+          format: 'double'
+          minimum: 0
+          example: 350000
+        stock:
+          type: 'integer'
+          minimum: 0
+          example: 20
+    Cart:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          example: 10
+        items:
+          type: 'array'
+          items:
+            $ref: '#/components/schemas/CartItem'
+        total:
+          type: 'number'
+          format: 'double'
+          example: 700000
+    CartItem:
+      type: 'object'
+      properties:
+        productId:
+          type: 'integer'
+          example: 1
+        quantity:
+          type: 'integer'
+          example: 2
+        subtotal:
+          type: 'number'
+          format: 'double'
+          example: 700000
+    CartItemInput:
+      type: 'object'
+      required:
+        - 'productId'
+        - 'quantity'
+      properties:
+        productId:
+          type: 'integer'
+          example: 1
+        quantity:
+          type: 'integer'
+          minimum: 1
+          example: 2
+    OrderInput:
+      type: 'object'
+      required:
+        - 'cartId'
+        - 'customerId'
+      properties:
+        cartId:
+          type: 'integer'
+          example: 10
+        customerId:
+          type: 'integer'
+          example: 101
+    Order:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          example: 501
+        customerId:
+          type: 'integer'
+          example: 101
+        total:
+          type: 'number'
+          format: 'double'
+          example: 700000
+        status:
+          type: 'string'
+          enum:
+            - 'PENDING'
+            - 'CONFIRMED'
+            - 'CANCELLED'
+          example: 'PENDING'
+    PaymentInput:
+      type: 'object'
+      required:
+        - 'orderId'
+        - 'method'
+      properties:
+        orderId:
+          type: 'integer'
+          example: 501
+        method:
+          type: 'string'
+          enum:
+            - 'TRANSFER'
+            - 'E_WALLET'
+            - 'COD'
+          example: 'E_WALLET'
+    Payment:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          example: 9001
+        orderId:
+          type: 'integer'
+          example: 501
+        method:
+          type: 'string'
+          example: 'E_WALLET'
+        status:
+          type: 'string'
+          enum:
+            - 'PENDING'
+            - 'SUCCESS'
+            - 'FAILED'
+          example: 'PENDING'
+        amount:
+          type: 'number'
+          format: 'double'
+          example: 700000
+    Error:
+      type: 'object'
+      properties:
+        code:
+          type: 'string'
+          example: 'NOT_FOUND'
+        message:
+          type: 'string'
+          example: 'Data tidak ditemukan'
+  responses:
+    BadRequest:
+      description: 'Format atau nilai permintaan tidak valid'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: 'Data tidak ditemukan'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServerError:
+      description: 'Terjadi kesalahan pada server'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
