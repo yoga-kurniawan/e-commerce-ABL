@@ -4,7 +4,7 @@
 
 ## 1. Status dan tujuan
 
-Dokumen ini adalah rencana pengujian, bukan laporan hasil. Berdasarkan progres developer, `./mvnw validate` telah berhasil. Belum ada bukti tests bisnis, eksekusi 17 operasi, atau load test selesai.
+Dokumen ini adalah rencana pengujian, bukan laporan hasil. Berdasarkan progres developer, `./mvnw validate` telah berhasil. Belum ada bukti tests bisnis, eksekusi seluruh operasi, atau load test selesai. Target kini 18 operasi pada 10 path setelah penambahan kontrak create Cart (OPEN-001 B).
 
 Laporan h. 25 dan 45 menjelaskan pemeriksaan kontrak menggunakan Swagger Editor. Contoh request/response dinyatakan sebagai ilustrasi pada h. 16. Validasi kontrak tidak membuktikan aplikasi mematuhi kontrak atau pembayaran selesai.
 
@@ -32,14 +32,14 @@ Untuk repository integration test, PostgreSQL/Testcontainers merupakan rancangan
 Sebelum menguji server:
 
 1. Buka [OpenAPI](../specs/openapi.yaml) di validator/Swagger Editor yang digunakan tim.
-2. Pastikan 9 path memuat total 17 operasi dengan operationId unik dan semua local reference terdefinisi.
+2. Pastikan 10 path memuat total 18 operasi dengan operationId unik dan semua local reference terdefinisi. Baseline laporan 17 operasi diperluas dengan POST `/carts` melalui OPEN-001 B.
 3. Pastikan path parameter sesuai nama pada URL dan required.
 4. Bandingkan request/response dengan contoh dan schema laporan.
 5. Catat ketidaklengkapan sumber sebagai issue; jangan mengubah kontrak tanpa keputusan.
 
 Schema asli tidak menetapkan seluruh whitelist, panjang string, null semantics, dan respons tambahan. Rencana tests untuk aturan baru harus menyebut keputusan yang menjadi dasarnya.
 
-## 4. Matriks minimum 17 operasi
+## 4. Matriks minimum 18 operasi
 
 Semua path memiliki prefix `/api/v1`. Setiap baris adalah target pengujian setelah implementasi tersedia, bukan hasil yang sudah lulus.
 
@@ -56,6 +56,7 @@ Semua path memiliki prefix `/api/v1`. Setiap baris adalah target pengujian setel
 | C-03 | PUT `/carts/{cartId}/items/{productId}` | Quantity tujuan ditetapkan | 200 |
 | C-04 | PATCH `/carts/{cartId}/items/{productId}` | Quantity yang diizinkan diperbarui | 200 |
 | C-05 | DELETE `/carts/{cartId}/items/{productId}` | Item dihapus; Cart tetap ada | 204, body kosong |
+| C-06 | POST `/carts` | customerId valid membuat Cart kosong dengan ID backend, items kosong, total 0 | 201 |
 | O-01 | POST `/orders` | Cart fixture layak dibuat menjadi pesanan | 201 |
 | O-02 | GET `/orders/{orderId}` | Order fixture ditemukan | 200 |
 | O-03 | PATCH `/orders/{orderId}` | Alamat diubah pada keadaan yang diizinkan | 200 |
@@ -75,9 +76,12 @@ Semua path memiliki prefix `/api/v1`. Setiap baris adalah target pengujian setel
 
 ### Cart
 
+- Create Cart mengembalikan ID yang dapat dibaca lewat GET dan dipakai untuk tambah item; customerId yang hilang menghasilkan 400. Aturan validasi identitas customer masih mengikuti OPEN-010.
+- POST item pada Cart yang tidak ada menghasilkan 404; tidak membuat Cart otomatis.
 - Quantity 0/negatif ditolak; Cart atau item yang tidak ditemukan mengikuti respons 404.
 - Update quantity melebihi stok menghasilkan konflik sesuai operasi update yang mendokumentasikan 409.
-- Uji quantity akhir ketika produk yang sama ditambahkan kembali, berdasarkan keputusan duplikasi item.
+- Uji quantity akhir ketika produk yang sama ditambahkan kembali: quantity awal 2 ditambah 3 menghasilkan satu item dengan quantity 5 (OPEN-002 A).
+- Perubahan harga katalog setelah penambahan awal tidak mengubah harga checkout item tersimpan (OPEN-003 B). Aturan harga quantity tambahan dan masa berlaku belum diputuskan.
 - Subtotal dan total sesuai policy harga; jangan mempercayai total bebas dari client.
 - Dependency Product 404 dibedakan dari timeout/5xx, dan tidak ditutupi dengan harga/stok default.
 
@@ -103,10 +107,10 @@ Penolakan field asing, null eksplisit, serta batas panjang/skala yang lebih keta
 
 ## 6. Skenario lintas layanan
 
-Prasyarat: empat API tersedia, database siap, dependency URL benar, serta Cart awal/fixture dan policy checkout sudah ditetapkan.
+Prasyarat: empat API tersedia, database siap, dependency URL benar, serta fixture customer dan aturan checkout yang diuji sudah ditetapkan.
 
 1. Buat Product dengan harga/stok fixture yang diketahui, lalu simpan ID respons.
-2. Tambahkan item ke Cart fixture kosong yang diketahui; jangan memakai endpoint POST Cart yang belum ada pada kontrak.
+2. Buat Cart melalui POST `/carts` dengan customerId fixture; simpan ID respons, periksa items kosong dan total 0, lalu tambahkan item memakai ID tersebut. Endpoint create Cart merupakan perluasan kontrak OPEN-001 B.
 3. Baca Cart dan periksa items/total menurut policy harga.
 4. Buat Order menggunakan cartId dan customerId fixture; simpan ID respons.
 5. Baca Order, lalu uji perubahan alamat dalam keadaan yang diizinkan.

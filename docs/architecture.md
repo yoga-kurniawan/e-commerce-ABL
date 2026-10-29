@@ -105,7 +105,7 @@ flowchart TB
     Payment --> BDB[(payment_db)]
 ```
 
-Setiap layanan mengakses kebutuhan data eksternalnya melalui lookup API. Order membaca Product untuk memperoleh nama/harga yang belum tersedia lengkap dalam respons Cart awal; policy harga saat checkout masih perlu diputuskan.
+Setiap layanan mengakses kebutuhan data eksternalnya melalui lookup API. Harga checkout mengikuti harga tersimpan pada Cart (OPEN-003 B). Order dapat membaca Product untuk data produk/validasi, tetapi tidak mengganti harga Cart dengan harga katalog terbaru. Cara membawa harga satuan tersimpan ke Order masih perlu diputuskan karena respons Cart awal belum memuatnya.
 
 Pintu masuk API pada diagram adalah komponen logis. Target deployment memakai Istio ingress, tetapi ingress/cluster belum dijalankan. Saat development langsung pada host, client dapat mengakses service melalui port lokal masing-masing.
 
@@ -293,8 +293,9 @@ Lifeline ProductStore menunjukkan dispatch melalui interface, bukan proses/serve
 
 | Skenario | Urutan aplikasi yang direncanakan | Hal yang perlu diputuskan |
 |---|---|---|
-| Tambah item Cart | Load Cart → ProductLookup → domain.addItem → save Cart | Perilaku item duplikat, harga Cart, stok/state |
-| Buat Order | CartLookup → ProductLookup → snapshot/total → save Order dan item | Harga checkout, Cart kosong/ownership, reservation |
+| Buat Cart | CreateCart → simpan Cart kosong → kembalikan ID backend | Kepemilikan, satu/beberapa Cart aktif, lifecycle |
+| Tambah item Cart | Load Cart → ProductLookup → domain.addItem → save Cart | Quantity duplikat ditambah; harga awal disimpan; harga saat penambahan ulang dan stok/state masih terbuka |
+| Buat Order | CartLookup → ProductLookup untuk data/validasi bila diperlukan → snapshot/total memakai harga Cart → save Order dan item | Transport harga satuan, masa berlaku harga, Cart kosong/ownership, reservation |
 | Buat Payment | OrderLookup → cek kelayakan → create Payment → save | Status awal, payment attempts, idempotency, verifikasi final |
 
 ## Pola desain
@@ -394,12 +395,12 @@ Deployment cluster merupakan tahap pengembangan berikutnya. Folder `deploy/` dan
 | Independensi layanan | Build, pengujian, serta deployment per service dengan kontrak kompatibel |
 | Kolaborasi tim | Batas data, port/interface, dan keputusan terdokumentasi |
 
-Tujuan tersebut perlu dibuktikan oleh tests dan praktik pengembangan, bukan disimpulkan hanya dari banyaknya folder. Rencana 17 operasi, skenario lintas layanan, dan format bukti ada di [testing.md](testing.md).
+Tujuan tersebut perlu dibuktikan oleh tests dan praktik pengembangan, bukan disimpulkan hanya dari banyaknya folder. Rencana 18 operasi, skenario lintas layanan, dan format bukti ada di [testing.md](testing.md).
 
 ## Batas implementasi
 
-Kontrak publik terdiri dari 17 operasi pada 9 path dan tersedia pada [OpenAPI](../specs/openapi.yaml).
+Kontrak publik project terdiri dari 18 operasi pada 10 path dan tersedia pada [OpenAPI](../specs/openapi.yaml). Baseline sumber memuat 17 operasi pada 9 path; OPEN-001 B menambahkan POST `/carts` untuk membuat Cart kosong dengan ID backend. Detail request awal memakai customerId sebagai referensi, tanpa menganggap autentikasi/otorisasi sudah tersedia.
 
-Bagian yang masih perlu ditetapkan meliputi pembuatan Cart awal, transisi state, policy snapshot/checkout, idempotency, dan integrasi provider pembayaran. Beberapa schema respons tambahan juga masih perlu dilengkapi; rinciannya ada pada [business-rules.md](business-rules.md).
+Pembuatan Cart melalui endpoint khusus, penambahan quantity duplikat, dan harga saat masuk Cart telah dipilih. Bagian yang masih perlu ditetapkan meliputi kepemilikan/lifecycle Cart, transisi state, masa berlaku harga, harga saat penambahan ulang, policy snapshot, idempotency, dan integrasi provider pembayaran. Beberapa schema respons tambahan juga masih perlu dilengkapi; rinciannya ada pada [business-rules.md](business-rules.md).
 
 Keputusan yang belum selesai tidak diperlakukan sebagai aturan final. Status, pilihan, serta konsekuensinya dicatat pada [decisions.md](decisions.md). Implementasi dan hasil pengujian diperbarui berdasarkan progres yang benar-benar tersedia.

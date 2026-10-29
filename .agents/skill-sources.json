@@ -1,0 +1,62 @@
+{
+    "installedAt":  "2026-10-29T11:36:29.0937038Z",
+    "destination":  ".agents/skills",
+    "skills":  [
+                   {
+                       "name":  "hexagonal-architecture",
+                       "repository":  "rrezartprebreza/spring-boot-skills",
+                       "path":  "skills/spring-boot-4/hexagonal-architecture",
+                       "commit":  "c2c23fe4a8aac4278a1b0e6d15955b3dffee1f7c",
+                       "status":  "installed"
+                   },
+                   {
+                       "name":  "spring-data-jpa",
+                       "repository":  "rrezartprebreza/spring-boot-skills",
+                       "path":  "skills/spring-boot-4/spring-data-jpa",
+                       "commit":  "c2c23fe4a8aac4278a1b0e6d15955b3dffee1f7c",
+                       "status":  "installed"
+                   },
+                   {
+                       "name":  "flyway-migrations",
+                       "repository":  "rrezartprebreza/spring-boot-skills",
+                       "path":  "skills/spring-boot-4/flyway-migrations",
+                       "commit":  "c2c23fe4a8aac4278a1b0e6d15955b3dffee1f7c",
+                       "status":  "installed"
+                   },
+                   {
+                       "name":  "testing-pyramid",
+                       "repository":  "rrezartprebreza/spring-boot-skills",
+                       "path":  "skills/spring-boot-4/testing-pyramid",
+                       "commit":  "c2c23fe4a8aac4278a1b0e6d15955b3dffee1f7c",
+                       "status":  "installed"
+                   },
+                   {
+                       "name":  "http-interface-clients",
+                       "repository":  "rrezartprebreza/spring-boot-skills",
+                       "path":  "skills/spring-boot-4/http-interface-clients",
+                       "commit":  "c2c23fe4a8aac4278a1b0e6d15955b3dffee1f7c",
+                       "status":  "installed"
+                   },
+                   {
+                       "name":  "systematic-debugging",
+                       "repository":  "obra/superpowers",
+                       "path":  "skills/systematic-debugging",
+                       "commit":  "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+                       "status":  "installed"
+                   },
+                   {
+                       "name":  "devops-engineer",
+                       "repository":  "Jeffallan/claude-skills",
+                       "path":  "skills/devops-engineer",
+                       "commit":  "143243cb2da0e52b02a766fa69c1ff77a71cc73c",
+                       "status":  "installed"
+                   },
+                   {
+                       "name":  "kubernetes-specialist",
+                       "repository":  "Jeffallan/claude-skills",
+                       "path":  "skills/kubernetes-specialist",
+                       "commit":  "143243cb2da0e52b02a766fa69c1ff77a71cc73c",
+                       "status":  "installed"
+                   }
+               ]
+}
