@@ -356,6 +356,8 @@ Repository item terpisah bersifat opsional bila aggregate parent sudah mencukupi
 
 ## Transaksi dan konsistensi
 
+Tahap 8 menambahkan inbound REST DTO/mapper/controller Payment dan encoder snapshot JSON produksi. Respons create/replay dikirim dari body tersimpan; GET/PATCH memakai DTO publik. Simulator development memiliki controller terpisah, profil/flag bersyarat, validasi binding loopback/token saat startup dan auth interceptor sebelum binding request. Handler error lengkap tetap tahap 9; simulator tidak mengubah Order atau memindahkan uang.
+
 Tahap 7 menyediakan Create/Get/Patch/ApplyPaymentResultUseCase di usecase.service. Orkestrator memakai domain dan output ports, tanpa transaksi SQL menyeluruh. Replay diperiksa sebelum lookup Order; kegagalan finalisasi direkonsiliasi lewat inspect bila outcome belum pasti. Adapter menandai rollback terkonfirmasi berdasarkan transaction completion, sehingga klaim hanya dilepas saat aman. PATCH/hasil memakai operasi atomic PaymentStore, dengan invariant/no-op tetap pada domain dan adapter.
 
 Tahap 6 Payment menyediakan OrderRestAdapter di belakang OrderLookup, client deklaratif group orders, serta DTO/mapper remote lokal Payment. Property clients.order-url dari helper/Helm diteruskan ke base URL group Boot; default connect/read timeout 2s/5s. Tests menggunakan stub HTTP loopback untuk wiring, presisi snapshot, dan pemetaan kegagalan. Lookup tidak membuka transaksi database; orkestrator berikutnya tetap harus memisahkannya dari finalisasi lokal.

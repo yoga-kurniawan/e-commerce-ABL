@@ -1,8 +1,37 @@
-# Hasil verifikasi Payment — tahap 1–7
+# Hasil verifikasi Payment — tahap 1–8
 
 Tanggal: 29–30 Oktober 2026. Mencakup unit tests domain/aplikasi, tests persistence PostgreSQL dan client HTTP terisolasi, belum verifikasi aplikasi Payment lengkap.
 
-## Verifikasi terbaru — tahap 7 use cases
+## Verifikasi terbaru — tahap 8 boundary HTTP dan simulator
+
+Working tree di atas commit `5b2d3aa`, selesai 30 Oktober 2026 pukul 00:21:16 WIB. Command aktual:
+
+```powershell
+& 'C:\Users\USER\.m2\wrapper\dists\apache-maven-3.9.6-bin\3311e1d4\apache-maven-3.9.6\bin\mvn.cmd' -o '-Dmaven.repo.local=C:\Users\USER\.m2\repository' -pl services/payment-service -am '-Dtest=*Test' test > services/payment-service/target/payment-stage8-test.log 2>&1
+exit $LASTEXITCODE
+```
+
+**BUILD SUCCESS, exit 0, 242 tests, 0 failures, 0 errors, 0 skipped.** PaymentsHttpBoundaryTest menambah 42 MVC slice tests dan SimulatorActivationTest 17 tests startup/configuration, di atas 183 tests sebelumnya. Runtime Java 22.0.2, compile release 17, Maven 3.9.6, Boot 4.1.2/Jackson 3.1.7, PostgreSQL 17.11/Testcontainers untuk regresi database. Runtime Java 17 belum diuji. Selector `*Test` sengaja tidak menjalankan generated PaymentApplicationTests (nama berakhiran Tests); ini bukan full Maven verify.
+
+Build bersih sebelumnya juga lulus 59 tests baru memakai selector `-Dtest=PaymentsHttpBoundaryTest,SimulatorActivationTest` dengan `clean test` (tanpa offline), selesai 00:18:41 WIB. Dependency plugin clean sempat belum lengkap di cache offline; pengulangan online melengkapinya. Referensi enum Jackson awal diperbaiki dari DeserializationFeature ke EnumFeature sesuai API Jackson 3; clean build membuang bytecode IDE yang memuat unresolved compilation problem. Tidak mengubah versi dependency/POM proyek. Log clean disimpan pada target/payment-stage8-clean-test.log; log akhir dan XML Surefire berada di target Payment.
+
+Bukti tahap 8:
+
+- POST baru/replay mengirim String status/body tersimpan persis, memakai encoder produksi, tanpa envelope atau reserialize state terkini. Output memuat nominal 350000.12500, tidak memuat metadata persistence, dan menghilangkan reference saat null.
+- GET/PATCH sukses memetakan DTO publik; whitespace reference dipertahankan. Semua controller hanya memanggil use case/mapper, tanpa repository.
+- MVC menolak body kosong/null, field wajib hilang/null, field asing (termasuk amount/status), properti duplikat, JSON tambahan, ID pecahan/string/overflow, enum numerik/salah case, reference kosong/Unicode whitespace/numerik dan ignored property. Header key hilang, invalid, atau terlalu panjang ditolak sebelum create use case.
+- Simulator SUCCESS/FAILED memanggil ApplyPaymentResultUseCase. Header token hilang/salah/duplikat ditolak 401 sebelum body binding; response memakai code/message. Body simulator PENDING/null/numerik atau field asing ditolak 400. Token fixture pada tests hanya nilai publik khusus test, bukan secret environment nyata.
+- Matrix profil none/prod/local/test/local+prod/test+prod dan flag aktif/nonaktif memeriksa pendaftaran controller. Saat tidak terdaftar, dispatcher MVC sungguhan mengembalikan 404. Profil prod menang atas local/test.
+- Startup context menolak address kosong, wildcard IPv4/IPv6 dan non-loopback; menolak token hilang/pendek. Literal IPv4/IPv6 loopback diterima dan token dibandingkan persis, tanpa trim. Tidak memasukkan secret aktual ke source/log.
+- Seluruh regresi domain, use case, transaksi/claim/fencing, schema/repository dan client Order tetap lulus.
+
+Batas: tests baru memakai MockMvc/use cases MockitoBean dan encoder/mapper/config nyata; bukan bukti full HTTP controller → use case → database → Order. Aktivasi memverifikasi web context/dispatcher serta validasi property bind; listener/socket deployment nyata belum diuji. Kontrak error domain/dependency (409/404/502/503/504 dan body framework seragam) menunggu tahap 9. Simulator tidak memindahkan uang; replay setelah perubahan state dengan database nyata memakai encoder test pada tahap sebelumnya, sehingga gabungan encoder produksi+database menjadi target tahap 10. Order nyata, provider, integrasi cluster dan generated application test belum diverifikasi.
+
+Konfigurasi demo lokal setelah datasource dan Order API/stub siap: aktifkan SPRING_PROFILES_ACTIVE=local, PAYMENT_SIMULATOR_ENABLED=true, SERVER_ADDRESS=127.0.0.1, dan pasok PAYMENT_SIMULATOR_TOKEN acak minimal 32 karakter melalui environment lokal. Kirim POST `/internal/dev/payments/{paymentId}/result` dengan header X-Simulator-Token dan body `{"status":"SUCCESS"}` atau `{"status":"FAILED"}`. Default off; jangan menyimpan token aktual dalam file yang dikomit. Profil prod tidak mendaftarkan endpoint. Periksa status terkini lewat GET Payment publik.
+
+Perubahan: DTO PaymentInput/PaymentReferencePatch/PaymentOutput, PaymentHttpMapper, PaymentsApi/Controller, PaymentCreationResponseEncoder, PaymentJsonConfiguration, empat class simulator, dua class tests, default flag pada application.properties dan dokumentasi plan/design/architecture/testing. Domain, migrasi dan OpenAPI tidak diubah. Aturan bisnis terbuka tetap mengikuti decisions.md.
+
+## Riwayat tahap 7 use cases
 
 Working tree di atas commit `aaef6e4`, selesai 30 Oktober 2026 pukul 00:05:55 WIB. Command aktual:
 
