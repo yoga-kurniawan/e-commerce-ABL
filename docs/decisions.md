@@ -31,7 +31,7 @@ Penerapan suatu keputusan juga berbeda dari status operasional: memilih PostgreS
 | OPEN-002 | Apa arti POST produk yang sudah ada di Cart? | Perilaku duplikat belum dirinci | Tambah quantity, atau tolak duplikat | Quantity akhir dan tests tidak konsisten |
 | OPEN-003 | Harga mana yang berlaku saat checkout? | Cart menampilkan subtotal; kebijakan perubahan harga belum lengkap | Harga Cart dibekukan, validasi harga terbaru, atau konfirmasi perubahan | Total Order dan ekspektasi pengguna berbeda |
 | OPEN-004 | Kapan stok direservasi/dikurangi? | Validasi stok disebut; workflow atomik lintas layanan belum ada | Reservation saat checkout/payment atau workflow lain | Risiko overselling dan compensation tidak terdefinisi |
-| OPEN-005 | Bagaimana menjaga riwayat Product? | Laporan h. 31 menyebut soft delete sebagai opsi | Nonaktifkan/soft delete, atau policy delete dengan konflik | Perilaku GET/delete dan referensi transaksi belum final |
+| OPEN-005 | Bagaimana menjaga riwayat Product? | Diselesaikan oleh DEC-011 | Soft delete melalui status aktif internal | Data produk tetap tersimpan; lihat keputusan di bawah |
 | OPEN-006 | Status mana yang boleh mengubah alamat? | Laporan h. 35 mencontohkan sebelum diproses | Hanya PENDING atau state rule yang ditetapkan tim | Handler/state tests tidak dapat dipatok |
 | OPEN-007 | Bagaimana pembayaran diverifikasi? | Laporan h. 37 mengharuskan sumber backend/provider yang dipercaya | Mock terkontrol untuk praktikum atau integrasi provider | SUCCESS/FAILED belum punya alur sah |
 | OPEN-008 | Apakah satu Order boleh memiliki beberapa Payment attempt? | Belum ada policy attempt | Satu request aktif atau beberapa attempt dengan aturan | Constraint UNIQUE(order_id) dan retry belum dapat dipilih |
@@ -64,6 +64,18 @@ Jangan menganggap response tanpa `content` di schema harus tanpa body. Narasi me
 | TECH-004 | HTTP client | REST adapter dengan timeout dan error mapping | Rancangan; nilai timeout ditetapkan saat implementasi |
 | TECH-005 | Image dan deployment versions | Pin versi/digest yang diuji saat deployment | Ditunda bersama setup cluster |
 | TECH-006 | Template konfigurasi lokal | Contoh tanpa secret; environment terminal/IDE dipilih eksplisit | Belum semua konfigurasi ditulis |
+
+## DEC-011: Soft delete Product
+
+- Status: diterima, 29 Oktober 2026, disepakati pengguna dalam pengerjaan Product.
+- Dasar: laporan h. 31 menawarkan soft delete; pengguna memilih mempertahankan data untuk history.
+- DELETE menonaktifkan produk (`active=false`), tanpa menghapus baris database.
+- Produk baru dan produk lama saat migrasi V2 berstatus aktif. GET/list hanya membaca produk aktif.
+- GET, PUT, PATCH, dan DELETE terhadap produk nonaktif diperlakukan sebagai resource tidak ditemukan.
+- Status aktif merupakan atribut internal, tidak ditambahkan ke input/output API. Tidak ada endpoint reaktivasi.
+- Tidak ada lookup transaksi lintas service pada delete. Status 409 tetap tercantum dalam kontrak sumber, tetapi belum memiliki kondisi bisnis pada policy ini.
+- Penyimpanan baris mempertahankan data terakhir, bukan audit seluruh perubahan harga/stok. Snapshot Order tetap diperlukan untuk riwayat transaksi.
+- Bukti yang diuji: migrasi V1 ke V2 mempertahankan produk lama sebagai aktif; soft delete menyembunyikan produk dari port dan mempertahankan baris serta atributnya.
 
 ## 6. Template keputusan berikutnya
 

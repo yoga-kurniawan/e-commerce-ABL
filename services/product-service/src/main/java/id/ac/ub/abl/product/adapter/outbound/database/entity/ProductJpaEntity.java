@@ -26,18 +26,27 @@ public class ProductJpaEntity {
     @Column(nullable = false)
     private Integer stock;
 
+    @Column(nullable = false)
+    private boolean active;
+
     protected ProductJpaEntity() {
     }
 
     public ProductJpaEntity(Long id, String name, BigDecimal price, Integer stock) {
+        this(id, name, price, stock, true);
+    }
+
+    public ProductJpaEntity(Long id, String name, BigDecimal price, Integer stock, boolean active) {
         this.id = id;
         this.name = name;
         this.price = price;
         this.stock = stock;
+        this.active = active;
     }
 
     public Long getId() { return id; }
     public String getName() { return name; }
     public BigDecimal getPrice() { return price; }
     public Integer getStock() { return stock; }
+    public boolean isActive() { return active; }
 }

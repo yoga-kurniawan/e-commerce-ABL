@@ -8,6 +8,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProductPersistenceMapperTest {
+    @Test
+    void roundTripPreservesInactiveStatus() {
+        var product = Product.restore(7L, "Keyboard", BigDecimal.ONE, 10, false);
+        var entity = mapper.toEntity(product);
+        assertFalse(entity.isActive());
+        assertFalse(mapper.toDomain(entity).isActive());
+    }
+
     private final ProductPersistenceMapper mapper = new ProductPersistenceMapper();
 
     @Test

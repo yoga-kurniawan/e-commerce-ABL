@@ -67,6 +67,8 @@ Semua path memiliki prefix `/api/v1`. Setiap baris adalah target pengujian setel
 
 ### Product
 
+- DEC-011: DELETE mempertahankan baris dan atribut produk dengan `active=false`; lookup/list tidak menampilkannya. Uji juga GET/update/delete ulang terhadap produk nonaktif serta migrasi data V1 ke V2.
+
 - Create/PUT dengan harga atau stok negatif ditolak; field wajib yang hilang ditangani sebagai 400.
 - Lookup/update ID yang tidak ada menghasilkan 404 pada operasi yang mendokumentasikannya.
 - PATCH mempertahankan field yang tidak dikirim. Body kosong tidak memenuhi `minProperties: 1`.

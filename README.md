@@ -58,6 +58,8 @@ Base URL publik yang direncanakan adalah `http://localhost:8080/api/v1` melalui 
 
 ## Database per service
 
+Product menggunakan soft delete sesuai DEC-011: data terakhir tetap di tabel `products` dengan `active=false`, sementara lookup/list katalog hanya membaca produk aktif. Ini tidak menyediakan audit seluruh perubahan atau endpoint history. Migrasi V2 menambahkan status aktif tanpa mengubah migrasi V1. Implementasi HTTP masih dikerjakan bertahap.
+
 ```text
 product-service → product_db
 cart-service    → cart_db

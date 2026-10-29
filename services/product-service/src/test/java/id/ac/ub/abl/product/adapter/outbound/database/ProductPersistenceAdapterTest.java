@@ -79,5 +79,11 @@ class ProductPersistenceAdapterTest {
         assertTrue(store.findById(first.getId()).isEmpty());
         assertTrue(store.findById(second.getId()).isPresent());
         assertEquals(1, store.findAll().size());
+        var historical = repository.findById(first.getId()).orElseThrow();
+        assertFalse(historical.isActive());
+        assertEquals("Keyboard", historical.getName());
+        assertEquals(0, BigDecimal.ONE.compareTo(historical.getPrice()));
+        assertEquals(1, historical.getStock());
+        assertEquals(2, repository.count());
     }
 }

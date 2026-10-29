@@ -10,8 +10,13 @@ public final class Product {
     private final String name;
     private final BigDecimal price;
     private final int stock;
+    private final boolean active;
 
     private Product(Long id, String name, BigDecimal price, Integer stock) {
+        this(id, name, price, stock, true);
+    }
+
+    private Product(Long id, String name, BigDecimal price, Integer stock, boolean active) {
         if (name == null) {
             throw new DomainRuleViolation("Nama produk wajib diisi");
         }
@@ -25,6 +30,7 @@ public final class Product {
         this.name = name;
         this.price = price;
         this.stock = stock;
+        this.active = active;
     }
 
     /** Produk baru belum memiliki ID; ID diberikan oleh penyimpanan. */
@@ -33,14 +39,22 @@ public final class Product {
     }
 
     public static Product restore(Long id, String name, BigDecimal price, Integer stock) {
+        return restore(id, name, price, stock, true);
+    }
+
+    public static Product restore(Long id, String name, BigDecimal price, Integer stock, boolean active) {
         if (id == null) {
             throw new DomainRuleViolation("ID produk tersimpan wajib diisi");
         }
-        return new Product(id, name, price, stock);
+        return new Product(id, name, price, stock, active);
     }
 
     public Product replace(String name, BigDecimal price, Integer stock) {
-        return new Product(id, name, price, stock);
+        return new Product(id, name, price, stock, active);
+    }
+
+    public Product deactivate() {
+        return new Product(id, name, price, stock, false);
     }
 
     public Product changeName(String name) {
@@ -59,4 +73,5 @@ public final class Product {
     public String getName() { return name; }
     public BigDecimal getPrice() { return price; }
     public int getStock() { return stock; }
+    public boolean isActive() { return active; }
 }

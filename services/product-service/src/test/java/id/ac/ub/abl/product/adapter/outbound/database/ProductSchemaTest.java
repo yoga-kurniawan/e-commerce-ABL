@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.flywaydb.core.Flyway;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -35,6 +36,22 @@ class ProductSchemaTest {
     @Autowired EntityManager entityManager;
     @Autowired TransactionTemplate transactions;
     @Autowired JdbcTemplate jdbc;
+
+    @Test
+    void upgradingExistingProductsDefaultsThemToActive() throws Exception {
+        var initial = Flyway.configure()
+                .dataSource(DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword())
+                .schemas("upgrade_test").target("1").load();
+        initial.migrate();
+        jdbc.update("INSERT INTO upgrade_test.products (name, price, stock) VALUES ('Existing', 1, 10)");
+
+        Flyway.configure()
+                .dataSource(DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword())
+                .schemas("upgrade_test").load().migrate();
+
+        assertEquals(Boolean.TRUE, jdbc.queryForObject(
+                "SELECT active FROM upgrade_test.products WHERE name = 'Existing'", Boolean.class));
+    }
 
     @Test
     void persistsAndReadsProductWithoutRoundingItsPrice() {

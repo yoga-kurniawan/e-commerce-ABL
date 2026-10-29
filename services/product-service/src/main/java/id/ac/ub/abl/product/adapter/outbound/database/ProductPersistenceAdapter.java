@@ -29,17 +29,17 @@ public class ProductPersistenceAdapter implements ProductStore {
 
     @Override
     public Optional<Product> findById(Long productId) {
-        return repository.findById(productId).map(mapper::toDomain);
+        return repository.findByIdAndActiveTrue(productId).map(mapper::toDomain);
     }
 
     @Override
     public List<Product> findAll() {
-        return repository.findAll().stream().map(mapper::toDomain).toList();
+        return repository.findAllByActiveTrue().stream().map(mapper::toDomain).toList();
     }
 
     @Override
     @Transactional
     public void delete(Product product) {
-        repository.delete(mapper.toEntity(product));
+        repository.save(mapper.toEntity(product.deactivate()));
     }
 }

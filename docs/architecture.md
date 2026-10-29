@@ -1,5 +1,7 @@
 # Architecture Overview
 
+Product memakai status internal `active` untuk soft delete (DEC-011). Port lookup/list hanya mengembalikan produk aktif; mapper mempertahankan status aktif/nonaktif. Use case delete menonaktifkan produk, dan adapter menyimpan perubahan tanpa menghapus baris. Status ini tidak menjadi atribut HTTP publik.
+
 [Kembali ke README](../README.md)
 
 ## Daftar isi

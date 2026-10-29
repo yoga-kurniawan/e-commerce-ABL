@@ -9,6 +9,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ProductTest {
     @Test
+    void deactivationPreservesProductDataAndCannotBeUndoneByReplacement() {
+        var original = Product.restore(7L, "Keyboard", new BigDecimal("350000.125"), 20);
+        var inactive = original.deactivate();
+        assertTrue(original.isActive());
+        assertFalse(inactive.isActive());
+        assertEquals(original.getId(), inactive.getId());
+        assertEquals(original.getName(), inactive.getName());
+        assertEquals(original.getPrice(), inactive.getPrice());
+        assertEquals(original.getStock(), inactive.getStock());
+        assertFalse(inactive.replace("Mouse", BigDecimal.ZERO, 0).isActive());
+        assertFalse(inactive.deactivate().isActive());
+    }
+
+    @Test
     void createsProductWithoutIdAndAllowsZeroPriceAndStock() {
         Product product = Product.create("Keyboard", BigDecimal.ZERO, 0);
 

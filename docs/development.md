@@ -115,6 +115,8 @@ Database hanya dipublish ke `127.0.0.1` pada port host yang ditetapkan. Ini setu
 
 ## 7. Migrasi dan tests
 
+Product menyediakan V1 untuk tabel `products` dan V2 untuk kolom `active` (default TRUE bagi data lama). Jangan mengubah V1 yang telah diterapkan. Test PostgreSQL memakai Testcontainers dan memerlukan Docker aktif, tanpa menjalankan Compose database development.
+
 Lokasi migrasi: `services/<service>-service/src/main/resources/db/migration/`.
 
 - Jika belum ada migrasi, mulai dari V1; jika versi sebelumnya sudah diterapkan, tambahkan versi berikutnya.

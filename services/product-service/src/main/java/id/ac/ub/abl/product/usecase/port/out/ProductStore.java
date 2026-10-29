@@ -13,11 +13,12 @@ public interface ProductStore {
      */
     Product save(Product product);
 
+    /** Hanya mencari produk aktif; produk nonaktif dianggap tidak ditemukan. */
     Optional<Product> findById(Long productId);
 
-    /** Mengembalikan daftar kosong jika belum ada produk. */
+    /** Mengembalikan produk aktif, atau daftar kosong jika tidak ada. */
     List<Product> findAll();
 
-    /** Menghapus produk yang sebelumnya telah ditemukan oleh use case. */
+    /** Menyimpan produk sebagai nonaktif tanpa menghapus catatan database. */
     void delete(Product product);
 }
