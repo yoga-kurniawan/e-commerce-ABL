@@ -43,5 +43,6 @@ Desktop.ini
 *.sql.dump
 *.~*~
 
-# Self Codex Folder
+# Self Development
 .codex
+.vscode

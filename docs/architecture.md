@@ -356,6 +356,8 @@ Repository item terpisah bersifat opsional bila aggregate parent sudah mencukupi
 
 ## Transaksi dan konsistensi
 
+Desain teknis Payment tahap 0 tersedia di [payment-service-technical-design.md](payment-service-technical-design.md): durable idempotency claim dengan lease/fencing, lookup Order di luar transaksi, finalisasi atomik Payment+snapshot replay, guard per Order, dan partial index untuk PENDING/SUCCESS. Ini rancangan yang belum dibuktikan implementasi. Kontrak simulator lokal dipisahkan dari kontrak API bisnis publik.
+
 - `@Transactional` mengatur transaksi database lokal, bukan transaksi global Product–Cart–Order–Payment.
 - Lookup HTTP dengan timeout sebaiknya tidak menahan lock/transaction SQL lebih lama dari yang diperlukan.
 - Pemisahan remote lookup dan transaksi lokal tidak menghilangkan race terhadap perubahan stok/harga.

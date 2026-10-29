@@ -320,7 +320,19 @@ paths:
       tags:
         - 'Payments'
       summary: 'Membuat permintaan pembayaran'
+      description: 'Idempotency-Key wajib dibuat client untuk satu operasi dan digunakan kembali saat retry. Key sama dengan payload berbeda ditolak 409 IDEMPOTENCY_KEY_REUSED. Untuk create yang berhasil, key dan payload yang sama mengembalikan status HTTP serta body respons create pertama tanpa membuat Payment baru, meskipun status Payment kemudian berubah. Hanya hasil create sukses disimpan untuk replay; error sebelum perubahan tersimpan tidak menjadi replay final. Jika commit berhasil tetapi pengiriman respons gagal, retry tetap memperoleh hasil tersimpan. Duplikat saat operasi create dengan key/payload sama masih berjalan menerima 409 REQUEST_IN_PROGRESS dan retry sendiri setelah jeda dengan key sama; tidak ada antrean atau jaminan FIFO. Setelah create selesai, respons dapat direplay sekalipun Payment masih PENDING. Respons disimpan selama 24 jam sejak hasil create pertama tersimpan; retry tidak memperpanjang retensi. Setelah retensi dan pembersihan catatan, replay tidak dijamin dan key yang digunakan ulang dapat dianggap operasi baru; aturan payment attempts tetap berlaku. Retensi bukan batas waktu membayar. Gunakan GET Payment untuk state terkini.'
       operationId: 'createPayment'
+      parameters:
+        - name: 'Idempotency-Key'
+          in: 'header'
+          required: true
+          description: 'Identitas operasi create dari client; gunakan key yang sama untuk retry operasi yang sama. Header yang tidak dikirim menghasilkan 400. Nilai case-sensitive 1-128 karakter ASCII; scope CREATE_PAYMENT_V1 dalam satu payment_db, bukan per Order. Nilai tidak di-trim.'
+          schema:
+            type: 'string'
+            minLength: 1
+            maxLength: 128
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+          example: 'create-payment-demo-001'
       requestBody:
         required: true
         content:
@@ -329,7 +341,7 @@ paths:
               $ref: '#/components/schemas/PaymentInput'
       responses:
         '201':
-          description: 'Permintaan pembayaran berhasil dibuat'
+          description: 'Permintaan pembayaran berhasil dibuat, atau respons create pertama diputar ulang untuk key dan payload yang sama'
           content:
             application/json:
               schema:
@@ -337,7 +349,34 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
-          description: 'Pesanan tidak ditemukan'
+          description: 'Order tidak ditemukan (ORDER_NOT_FOUND)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 'REQUEST_IN_PROGRESS jika operasi dengan key/payload sama masih berjalan: retry setelah jeda dengan key sama. IDEMPOTENCY_KEY_REUSED jika key sama dipakai dengan payload berbeda: gunakan key baru untuk operasi bisnis baru yang memenuhi syarat. ORDER_NOT_PAYABLE untuk Order bukan PENDING; PAYMENT_ALREADY_PENDING untuk attempt aktif; ORDER_ALREADY_PAID setelah SUCCESS; PAYMENT_OPERATION_BUSY untuk lock sibuk. Konflik tidak menggantikan hasil create sukses untuk replay.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                inProgress:
+                  value:
+                    code: 'REQUEST_IN_PROGRESS'
+                    message: 'Permintaan dengan key yang sama sedang diproses; coba lagi setelah jeda'
+                differentPayload:
+                  value:
+                    code: 'IDEMPOTENCY_KEY_REUSED'
+                    message: 'Key sudah digunakan untuk payload berbeda'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '503':
+          $ref: '#/components/responses/PaymentUnavailable'
+        '502':
+          $ref: '#/components/responses/OrderUpstreamError'
+        '504':
+          $ref: '#/components/responses/OrderTimeout'
   /payments/{paymentId}:
     get:
       tags:
@@ -359,10 +398,17 @@ paths:
                 $ref: '#/components/schemas/Payment'
         '404':
           $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '503':
+          $ref: '#/components/responses/PaymentUnavailable'
     patch:
       tags:
         - 'Payments'
       summary: 'Memperbarui atribut pembayaran yang diizinkan'
+      description: 'Hanya transactionReference dapat diisi/diperbaiki selama PENDING. Tolak null, string kosong atau seluruhnya whitespace, body kosong, dan field asing dengan 400. SUCCESS/FAILED menolak perubahan dengan 409. Operasi ini tidak mengubah amount/status atau memverifikasi pembayaran.'
       operationId: 'updatePayment'
       parameters:
         - name: 'paymentId'
@@ -375,20 +421,28 @@ paths:
         content:
           application/json:
             schema:
-              type: 'object'
-              properties:
-                transactionReference:
-                  type: 'string'
-              minProperties: 1
+              $ref: '#/components/schemas/PaymentReferencePatch'
       responses:
         '200':
           description: 'Data pembayaran berhasil diperbarui'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 'Perubahan tidak diizinkan'
+          description: 'PAYMENT_NOT_MODIFIABLE pada state terminal; PAYMENT_OPERATION_BUSY saat lock sibuk'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '503':
+          $ref: '#/components/responses/PaymentUnavailable'
   /carts/{cartId}/items/{productId}:
     put:
       tags:
@@ -608,6 +662,8 @@ components:
           example: 'PENDING'
     PaymentInput:
       type: 'object'
+      additionalProperties: false
+      description: 'Hanya orderId integer yang muat di Long dan method enum. Null, field asing, serta properti JSON duplikat ditolak 400.'
       required:
         - 'orderId'
         - 'method'
@@ -622,8 +678,21 @@ components:
             - 'E_WALLET'
             - 'COD'
           example: 'E_WALLET'
+    PaymentReferencePatch:
+      type: 'object'
+      additionalProperties: false
+      required:
+        - 'transactionReference'
+      properties:
+        transactionReference:
+          type: 'string'
+          minLength: 1
+          pattern: '\S'
+          description: 'Reference yang mengandung setidaknya satu karakter non-whitespace. Null dan nilai kosong ditolak; teks dipertahankan persis tanpa trim otomatis; tidak ada batas panjang bisnis baru.'
+          example: 'TRX-DEMO-001'
     Payment:
       type: 'object'
+      required: [id, orderId, method, status, amount]
       properties:
         id:
           type: 'integer'
@@ -643,8 +712,12 @@ components:
           example: 'PENDING'
         amount:
           type: 'number'
-          format: 'double'
-          example: 700000
+          description: 'Total akhir dari Order; implementasi menggunakan BigDecimal/NUMERIC tanpa pembulatan diam-diam. Payment tidak menghitung biaya tambahan sendiri.'
+          example: 700000.125
+        transactionReference:
+          type: 'string'
+          description: 'Reference setelah diisi. Atribut opsional ini dapat tidak dikirim sebelum pengisian pertama dan tidak membuktikan pembayaran berhasil.'
+          example: 'TRX-DEMO-001'
     Error:
       type: 'object'
       properties:
@@ -655,6 +728,24 @@ components:
           type: 'string'
           example: 'Data tidak ditemukan'
   responses:
+    PaymentUnavailable:
+      description: 'DEPENDENCY_UNAVAILABLE: koneksi Order gagal, database tidak tersedia, atau hasil commit belum dapat dipastikan. Retry dengan key sama; bukan bukti Payment FAILED.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    OrderUpstreamError:
+      description: 'ORDER_UPSTREAM_ERROR: upstream 5xx atau respons Order invalid, ID berbeda, total hilang/negatif/tidak finite, atau status tidak dikenal.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    OrderTimeout:
+      description: 'ORDER_TIMEOUT: timeout koneksi/baca Order; bukan bukti Payment FAILED.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     BadRequest:
       description: 'Format atau nilai permintaan tidak valid'
       content:
