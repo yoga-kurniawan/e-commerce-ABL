@@ -27,7 +27,7 @@ public class PaymentCreationPersistenceAdapter implements PaymentCreationCommitt
         this.session = session; this.transactions = transactions; this.encoder = encoder;
     }
     public CreatePaymentResult.Created commit(IdempotencyClaim claim, OrderSnapshot order) {
-        return transactions.run("PAYMENT_OPERATION_BUSY", () -> {
+        return transactions.creation(() -> {
             var row = transactions.claimLock(() -> idempotency.findByIdForUpdate(PaymentIdempotencyAdapter.id(claim.request())))
                     .orElseThrow(() -> conflict("REQUEST_IN_PROGRESS"));
             if (row.getState() != IdempotencyState.PROCESSING || !row.getOwnerToken().equals(claim.ownerToken())

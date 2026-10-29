@@ -15,6 +15,8 @@ public interface PaymentCreationCommitter {
      * lalu simpan COMPLETED+respons dengan TTL 24 jam. Semua commit atau rollback bersama.
      * Tidak melakukan lookup HTTP di dalam transaksi. Gunakan encoder murni.
      * Konflik/hasil commit ambigu bukan Created; laporkan kegagalan yang dapat dibedakan.
+     * Rollback yang dikonfirmasi completion dilaporkan lewat PaymentCreationRolledBackException.
+     * Kegagalan lain tidak memberi izin release; caller wajib rekonsiliasi melalui inspect.
      */
     CreatePaymentResult.Created commit(IdempotencyClaim claim, OrderSnapshot order);
 }

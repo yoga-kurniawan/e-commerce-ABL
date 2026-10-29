@@ -1,8 +1,34 @@
-# Hasil verifikasi Payment — tahap 1–6
+# Hasil verifikasi Payment — tahap 1–7
 
-Tanggal: 29 Oktober 2026. Mencakup unit tests domain/tipe aplikasi dan tests schema/mapping PostgreSQL, belum verifikasi aplikasi Payment lengkap.
+Tanggal: 29–30 Oktober 2026. Mencakup unit tests domain/aplikasi, tests persistence PostgreSQL dan client HTTP terisolasi, belum verifikasi aplikasi Payment lengkap.
 
-## Verifikasi terbaru — tahap 6 Order REST adapter
+## Verifikasi terbaru — tahap 7 use cases
+
+Working tree di atas commit `aaef6e4`, selesai 30 Oktober 2026 pukul 00:05:55 WIB. Command aktual:
+
+```powershell
+& 'C:\Users\USER\.m2\wrapper\dists\apache-maven-3.9.6-bin\3311e1d4\apache-maven-3.9.6\bin\mvn.cmd' -o '-Dmaven.repo.local=C:\Users\USER\.m2\repository' -pl services/payment-service -am '-Dtest=CreatePaymentUseCaseTest,PaymentMutationUseCasesTest,OrderRestAdapterTest,OrderTransportFailureTest,PaymentPersistenceAdaptersTest,PaymentRepositoriesTest,PaymentSchemaTest,PaymentTest,OrderSnapshotTest,PaymentCommandsTest,PaymentApplicationTypesTest' test > services/payment-service/target/payment-stage7-test.log 2>&1
+exit $LASTEXITCODE
+```
+
+**BUILD SUCCESS, exit 0; 183 tests, 0 failures, 0 errors, 0 skipped.** Rincian: CreatePaymentUseCaseTest 22, PaymentMutationUseCasesTest 5, PaymentPersistenceAdaptersTest 15 (satu tambahan), repository 12, schema 29, HTTP/transport 38, unit domain/commands/model sebelumnya 62. Runtime Java 22.0.2; compile release 17; Maven 3.9.6; Boot 4.1.2; PostgreSQL 17.11 via Testcontainers. Runtime Java 17 belum diuji. Log akhir dan XML Surefire berada di target Payment Service.
+
+Unit tests memakai MockitoExtension dengan mock output ports dan fake PaymentStore yang menjalankan aturan domain nyata, tanpa Spring context/database. Tambahan 28 tests unik dibanding tahap 6 mencakup:
+
+- Create berurutan claim → lookup → commit dengan snapshot/nominal utuh; replay langsung tanpa lookup Order meskipun dependency tidak tersedia. Mismatch/in-progress tidak memanggil finalisasi atau melepas klaim milik request lain.
+- Order 404, status CONFIRMED/CANCELLED, ID salah, timeout/koneksi/upstream failure melepas klaim secara bersyarat sebelum finalisasi dimulai, tanpa memanggil committer.
+- Finalisasi yang mengonfirmasi rollback melepas klaim lalu meneruskan error asli, termasuk conflict dan dependency failure. Kegagalan release tidak menimpa error utama.
+- Finalisasi dengan hasil belum pasti: Completed menjadi replay; Missing/Processing/read failure tetap dependency unavailable tanpa release atau retry finalisasi. PayloadMismatch tetap konflik; claim gagal tanpa token tidak memulai lookup.
+- Get missing/null, PATCH mempertahankan amount/method/status dan reference persis, hasil SUCCESS/FAILED identik hanya satu efek pada fake port, patch terminal/hasil berlawanan tidak menambah efek. Ini bukan mock yang mengklaim atomicity database.
+- Tambahan PostgreSQL memakai adapter nyata: encoder gagal → rollback terkonfirmasi → use case release → retry berhasil → hasil SUCCESS → replay body awal tanpa lookup Order lagi; hanya satu Payment tersimpan. Callback lookup memeriksa tidak ada transaksi SQL aktif.
+
+Kontrak kegagalan committer diperjelas menggunakan PaymentCreationRolledBackException dan observer transaction afterCompletion. Hanya STATUS_ROLLED_BACK menghasilkan wrapper; error setelah commit berhasil tetap tidak dibungkus sebagai rollback. Test fault acknowledgment commit dari tahap 5 secara eksplisit memeriksa pembedaan ini. Tests concurrency lama diperbarui untuk memeriksa wrapper beserta code penyebabnya; run awal sempat gagal karena test hanya menangkap PaymentOperationException lama, lalu run gabungan akhir lulus.
+
+Batas: adapter/DB tests membuktikan transaksi lokal dan outcome; unit mock tidak membuktikan jaringan/database nyata. Integrasi baru memakai snapshot Order dan encoder khusus test, belum full HTTP Order → use case → controller. Tidak ada write Order, provider nyata, refund, route simulator, encoder produksi, generated PaymentApplicationTests, runtime Java 17 atau full Maven verify pada tahap ini. Use case tidak membuka transaksi SQL menyeluruh; caller berikutnya harus tetap menghindari membungkus lookup HTTP dalam transaksi sendiri.
+
+File baru: CreatePaymentUseCase, GetPaymentUseCase, PatchPaymentUseCase, ApplyPaymentResultUseCase, PaymentCreationRolledBackException, CreatePaymentUseCaseTest dan PaymentMutationUseCasesTest. PaymentCreationCommitter, PaymentTransactions, PaymentCreationPersistenceAdapter serta integration tests diselaraskan dengan kontrak rollback. Dokumentasi plan/design/architecture/testing diperbarui; domain, migrasi dan OpenAPI tidak diubah.
+
+## Riwayat tahap 6 Order REST adapter
 
 Working tree di atas commit `bea0624`, run gabungan selesai 29 Oktober 2026 pukul 23:54:15 WIB. Command aktual:
 

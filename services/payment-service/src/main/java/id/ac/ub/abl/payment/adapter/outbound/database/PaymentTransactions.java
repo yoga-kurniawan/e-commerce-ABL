@@ -30,6 +30,23 @@ public class PaymentTransactions {
         this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
     public Duration lease() { return lease; }
+    public <T> T creation(Supplier<T> action) {
+        int[] completion = {org.springframework.transaction.support.TransactionSynchronization.STATUS_UNKNOWN};
+        try {
+            return run("PAYMENT_OPERATION_BUSY", () -> {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                        new org.springframework.transaction.support.TransactionSynchronization() {
+                            @Override public void afterCompletion(int status) { completion[0] = status; }
+                        });
+                return action.get();
+            });
+        } catch (RuntimeException failure) {
+            if (completion[0] == org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK) {
+                throw new id.ac.ub.abl.payment.usecase.exception.PaymentCreationRolledBackException(failure);
+            }
+            throw failure;
+        }
+    }
     public <T> T claimLock(Supplier<T> action) {
         try { return action.get(); }
         catch (DataAccessException failure) {

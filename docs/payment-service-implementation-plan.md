@@ -2,7 +2,7 @@
 
 Dokumen ini adalah rencana pekerjaan, bukan hasil implementasi.
 
-Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain), tahap 2 (commands, ports, tipe aplikasi), dan tahap 3 (migrasi/JPA entities) selesai dengan 91 tests gabungan lulus: 62 unit dan 29 tests schema/mapping pada PostgreSQL 17.11 terisolasi. Rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 4 (repository) selesai dengan total 103 tests lulus, termasuk 12 tests repository PostgreSQL. Tahap 5 (mapper/persistence adapter) selesai dengan 117 tests gabungan lulus. Tahap 6 (Order REST adapter) selesai dengan 155 tests gabungan lulus. Tahap 7–10 belum dikerjakan; use case dan endpoint belum diimplementasikan.
+Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain), tahap 2 (commands, ports, tipe aplikasi), dan tahap 3 (migrasi/JPA entities) selesai dengan 91 tests gabungan lulus: 62 unit dan 29 tests schema/mapping pada PostgreSQL 17.11 terisolasi. Rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 4 (repository) selesai dengan total 103 tests lulus, termasuk 12 tests repository PostgreSQL. Tahap 5 (mapper/persistence adapter) selesai dengan 117 tests gabungan lulus. Tahap 6 (Order REST adapter) selesai dengan 155 tests gabungan lulus. Tahap 7 (use cases) selesai dengan 183 tests gabungan lulus. Tahap 8–10 belum dikerjakan; boundary HTTP, encoder produksi dan simulator belum diimplementasikan.
 
 Acuan urutan: bagian 4 dan 5 pada `.codex/alur-pekerjaan-developer-setiap-service.md`. Acuan perilaku: [decisions.md](decisions.md), khususnya DEC-012 sampai DEC-017, [business-rules.md](business-rules.md), dan [OpenAPI](../specs/openapi.yaml). Alur lama dipertahankan; idempotency dan simulator ditambahkan sesuai keputusan terbaru. Rujukan historis di `.codex` tidak menggantikan kontrak/keputusan terbaru.
 
@@ -224,6 +224,8 @@ Order nyata untuk pengujian terisolasi tahap ini.
 ## Tahap 7 — Use cases
 
 Hasil: create/get/PATCH Payment dan pemrosesan hasil simulator, dengan unit tests.
+
+Status: selesai, 30 Oktober 2026. Create/Get/Patch/ApplyPaymentResultUseCase tersedia di usecase.service. Kontrak committer diperjelas dengan rollback terkonfirmasi berdasarkan transaction completion; hasil ambigu direkonsiliasi melalui inspect. Sebanyak 183 tests gabungan lulus, termasuk 27 unit tests dan satu tambahan PostgreSQL tahap 7. Route HTTP/encoder produksi/simulator tetap tahap 8; lihat payment-service-testing.md untuk batas verifikasi.
 
 ```text
 Gunakan $hexagonal-architecture dan $testing-pyramid.

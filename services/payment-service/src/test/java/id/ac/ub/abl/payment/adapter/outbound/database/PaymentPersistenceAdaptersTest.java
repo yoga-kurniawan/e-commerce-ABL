@@ -142,7 +142,7 @@ class PaymentPersistenceAdaptersTest {
         var claim = claim(request("order", 501L));
         assertThatThrownBy(() -> creation.commit(claim, order(502L))).satisfies(error -> code(error, "ORDER_UPSTREAM_ERROR"));
         assertThatThrownBy(() -> creation.commit(claim, new OrderSnapshot(501L, BigDecimal.ONE, OrderSnapshot.Status.CANCELLED)))
-                .isInstanceOf(OrderNotPayableException.class);
+                .hasCauseInstanceOf(OrderNotPayableException.class);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM payments", Integer.class)).isZero();
     }
     @Test void sameKey_whenClaimedConcurrently_shouldHaveExactlyOneOwner() throws Exception {
@@ -160,11 +160,17 @@ class PaymentPersistenceAdaptersTest {
         var first = claim(request("a", 501L)); var second = claim(request("b", 501L));
         var start = new CountDownLatch(1); var pool = Executors.newFixedThreadPool(2);
         try {
-            Callable<Object> a = () -> { await(start); try { return creation.commit(first, order(501L)); } catch (PaymentOperationException e) { return e; } };
-            Callable<Object> b = () -> { await(start); try { return creation.commit(second, order(501L)); } catch (PaymentOperationException e) { return e; } };
+            Callable<Object> a = () -> { await(start); try { return creation.commit(first, order(501L)); } catch (RuntimeException e) { return e; } };
+            Callable<Object> b = () -> { await(start); try { return creation.commit(second, order(501L)); } catch (RuntimeException e) { return e; } };
             var x = pool.submit(a); var y = pool.submit(b); start.countDown();
             var results = java.util.List.of(x.get(10, TimeUnit.SECONDS), y.get(10, TimeUnit.SECONDS));
             assertThat(results.stream().filter(CreatePaymentResult.Created.class::isInstance).count()).isEqualTo(1);
+            results.stream().filter(RuntimeException.class::isInstance).forEach(failure -> {
+                assertThat(failure).isInstanceOf(id.ac.ub.abl.payment.usecase.exception.PaymentCreationRolledBackException.class);
+                var cause = ((id.ac.ub.abl.payment.usecase.exception.PaymentCreationRolledBackException) failure).failure();
+                assertThat(cause).isInstanceOfSatisfying(PaymentOperationException.class,
+                        error -> assertThat(error.getCode()).isIn("PAYMENT_ALREADY_PENDING", "PAYMENT_OPERATION_BUSY"));
+            });
             assertThat(jdbc.queryForObject("SELECT count(*) FROM payments", Integer.class)).isEqualTo(1);
         } finally { pool.shutdownNow(); }
     }
@@ -239,6 +245,7 @@ class PaymentPersistenceAdaptersTest {
         var faultyCreation = new PaymentCreationPersistenceAdapter(paymentsRepository, guardsRepository, idempotencyRepository,
                 mapper, session, faultyTransactions, beans.getBeanProvider(CreationResponseEncoder.class));
         assertThatThrownBy(() -> faultyCreation.commit(claim, order(501L)))
+                .isNotInstanceOf(id.ac.ub.abl.payment.usecase.exception.PaymentCreationRolledBackException.class)
                 .satisfies(error -> code(error, "DEPENDENCY_UNAVAILABLE"));
         assertThat(keys.inspect(request)).isInstanceOf(IdempotencyLookupResult.Completed.class);
         assertThat(keys.claim(request)).isInstanceOf(IdempotencyClaimResult.Replayed.class);
@@ -247,7 +254,29 @@ class PaymentPersistenceAdaptersTest {
     private IdempotencyClaim claim(CreatePaymentCommand request) { return ((IdempotencyClaimResult.Claimed) keys.claim(request)).claim(); }
     private CreatePaymentCommand request(String key, Long order) { return new CreatePaymentCommand(order, PaymentMethod.COD, new IdempotencyKey(key)); }
     private OrderSnapshot order(Long id) { return new OrderSnapshot(id, new BigDecimal("350000.12500"), OrderSnapshot.Status.PENDING); }
-    private void code(Throwable error, String expected) { assertThat(error).isInstanceOfSatisfying(PaymentOperationException.class, failure -> assertThat(failure.getCode()).isEqualTo(expected)); }
+    private void code(Throwable error, String expected) {
+        if (error instanceof id.ac.ub.abl.payment.usecase.exception.PaymentCreationRolledBackException rollback) { error = rollback.failure(); }
+        assertThat(error).isInstanceOfSatisfying(PaymentOperationException.class, failure -> assertThat(failure.getCode()).isEqualTo(expected));
+    }
+    @Test void useCases_whenEncoderRollsBack_shouldReleaseRetryAndReplayWithoutOrderLookup() {
+        var command = request("usecase", 501L);
+        var useCase = new id.ac.ub.abl.payment.usecase.service.CreatePaymentUseCase(keys, id -> {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            return java.util.Optional.of(order(id));
+        }, creation);
+        encoder.action = () -> { throw new IllegalStateException("encoder fault"); };
+        assertThatThrownBy(() -> useCase.execute(command)).hasMessage("encoder fault");
+        assertThat(keys.inspect(command)).isInstanceOf(IdempotencyLookupResult.Missing.class);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payments", Integer.class)).isZero();
+        encoder.action = () -> { };
+        var created = (CreatePaymentResult.Created) useCase.execute(command);
+        new id.ac.ub.abl.payment.usecase.service.ApplyPaymentResultUseCase(payments).execute(
+                new ApplyPaymentResultCommand(created.payment().getId(), PaymentStatus.SUCCESS));
+        var replayOnly = new id.ac.ub.abl.payment.usecase.service.CreatePaymentUseCase(keys,
+                id -> { throw new AssertionError("Replay tidak boleh lookup Order"); }, creation);
+        assertThat(replayOnly.execute(command)).isEqualTo(new CreatePaymentResult.Replayed(created.response()));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payments", Integer.class)).isEqualTo(1);
+    }
     private static void await(CountDownLatch latch) {
         try { if (!latch.await(10, TimeUnit.SECONDS)) { throw new AssertionError("Synchronization timeout"); } }
         catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new AssertionError(e); }

@@ -356,6 +356,8 @@ Repository item terpisah bersifat opsional bila aggregate parent sudah mencukupi
 
 ## Transaksi dan konsistensi
 
+Tahap 7 menyediakan Create/Get/Patch/ApplyPaymentResultUseCase di usecase.service. Orkestrator memakai domain dan output ports, tanpa transaksi SQL menyeluruh. Replay diperiksa sebelum lookup Order; kegagalan finalisasi direkonsiliasi lewat inspect bila outcome belum pasti. Adapter menandai rollback terkonfirmasi berdasarkan transaction completion, sehingga klaim hanya dilepas saat aman. PATCH/hasil memakai operasi atomic PaymentStore, dengan invariant/no-op tetap pada domain dan adapter.
+
 Tahap 6 Payment menyediakan OrderRestAdapter di belakang OrderLookup, client deklaratif group orders, serta DTO/mapper remote lokal Payment. Property clients.order-url dari helper/Helm diteruskan ke base URL group Boot; default connect/read timeout 2s/5s. Tests menggunakan stub HTTP loopback untuk wiring, presisi snapshot, dan pemetaan kegagalan. Lookup tidak membuka transaksi database; orkestrator berikutnya tetap harus memisahkannya dari finalisasi lokal.
 
 Tahap 4 Payment menambahkan PaymentsRepository, PaymentOrderGuardsRepository, PaymentIdempotencyRepository, serta helper PaymentDatabaseSession di outbound database adapter. Lock dan native mutation memerlukan transaksi caller; helper menyetel PostgreSQL lock_timeout transaction-local sebelum operasi. Query/locking telah diuji dengan PostgreSQL terisolasi; implementasi transaksi output port tersedia pada tahap 5 melalui PaymentPersistenceAdapter, PaymentIdempotencyAdapter dan PaymentCreationPersistenceAdapter dengan helper PaymentTransactions.
