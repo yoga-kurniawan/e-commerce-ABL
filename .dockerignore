@@ -1,0 +1,18 @@
+# Build context memakai root repository; sertakan source, POM, dan Maven Wrapper.
+.git
+**/target
+**/.idea
+**/.vscode
+**/*.iml
+**/.env
+**/.env.*
+**/.secrets
+**/secrets.local.*
+**/credentials.local.*
+**/*.log
+.tools
+rendered
+backups
+docs
+tests
+initializr-metadata.json

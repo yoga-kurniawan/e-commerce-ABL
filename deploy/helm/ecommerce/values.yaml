@@ -1,0 +1,57 @@
+# Tag image lokal Minikube. Sesuaikan repository/tag atau pin digest untuk rilis.
+# Alamat database harus dapat dijangkau Pod Kubernetes.
+replicaCount: 1
+imagePullSecrets: []
+imagePullPolicy: IfNotPresent
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+services:
+  product:
+    enabled: true
+    image:
+      repository: ecommerce/product-service
+      tag: "0.1.0-local"
+      digest: ""
+    database:
+      host: product-db
+      port: 5432
+      name: product_db
+      existingSecret: product-db-credentials
+  cart:
+    enabled: true
+    image:
+      repository: ecommerce/cart-service
+      tag: "0.1.0-local"
+      digest: ""
+    database:
+      host: cart-db
+      port: 5432
+      name: cart_db
+      existingSecret: cart-db-credentials
+  order:
+    enabled: true
+    image:
+      repository: ecommerce/order-service
+      tag: "0.1.0-local"
+      digest: ""
+    database:
+      host: order-db
+      port: 5432
+      name: order_db
+      existingSecret: order-db-credentials
+  payment:
+    enabled: true
+    image:
+      repository: ecommerce/payment-service
+      tag: "0.1.0-local"
+      digest: ""
+    database:
+      host: payment-db
+      port: 5432
+      name: payment_db
+      existingSecret: payment-db-credentials

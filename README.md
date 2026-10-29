@@ -36,8 +36,8 @@ Struktur kode dirancang untuk memisahkan model domain, koordinator use case, ser
 | Database | PostgreSQL 17, database terpisah per service | Pilihan rancangan; runtime belum dikonfirmasi |
 | Persistence | Spring Data JPA/Hibernate dan Flyway | Dependency dan rancangan implementasi |
 | Build | Maven multi-module dan Maven Wrapper | `validate` berhasil |
-| Container | Docker | Daemon lokal sudah berjalan pada pemeriksaan terakhir |
-| Deployment | Kubernetes/Minikube, Istio, Helm | Tahap berikutnya; cluster ditunda |
+| Container | Docker Linux containers | Engine harus aktif pada Windows/Linux yang digunakan |
+| Deployment | Kubernetes/Minikube, Istio, Helm | Template Helm aplikasi tersedia; cluster dan Istio ditunda |
 | Pengujian HTTP/beban | curl, Postman, Siege | Skenario disiapkan; hasil bisnis/beban belum tersedia |
 
 Autentikasi JWT, role ADMIN/USER, Kafka, DLQ, shipping, dan notification berada di luar cakupan kontrak empat service saat ini. Penambahannya memerlukan desain dan kontrak tersendiri.
@@ -115,7 +115,7 @@ ABL-Project/
 │   ├── development.md
 │   ├── testing.md
 │   └── decisions.md
-├── deploy/              # Konfigurasi deployment ditambahkan saat tahapnya dimulai
+├── deploy/              # Helm chart aplikasi; database dan Istio dilengkapi bertahap
 ├── scripts/             # Otomatisasi sesuai kebutuhan
 └── tests/               # Pengujian lintas service
 ```
@@ -159,7 +159,7 @@ Contoh pembuatan PostgreSQL lokal tersedia pada [panduan database development](d
 | abl-order-db | 127.0.0.1:5435 → 5432 |
 | abl-payment-db | 127.0.0.1:5436 → 5432 |
 
-Tabel adalah konfigurasi yang dituju, bukan daftar container yang sudah terbukti berjalan. Perintah Compose/Helm baru ditambahkan ketika file konfigurasinya benar-benar dibuat.
+Tabel adalah konfigurasi yang dituju, bukan daftar container yang sudah terbukti berjalan. Compose database lokal tersedia pada `compose.local.yaml`; Helm chart aplikasi tersedia pada `deploy/helm/ecommerce/`.
 
 ## Memeriksa database
 
@@ -440,9 +440,9 @@ Status pengembangan per **29 Oktober 2026**:
 | Empat skeleton Initializr dan parent/module Maven | Tersedia; `validate` berhasil |
 | Struktur package domain/usecase/adapter | Mulai disiapkan; kelengkapan kelas bisnis belum diverifikasi |
 | Kontrak OpenAPI | Sudah disalin ke project Ubuntu |
-| Docker daemon | Berjalan pada pemeriksaan terakhir |
+| Docker daemon | Periksa pada sistem operasi yang sedang digunakan |
 | Database dan endpoint bisnis | Belum dikonfirmasi siap |
-| Cluster/deployment | Ditunda |
+| Cluster/deployment | Dockerfile dan Helm chart aplikasi tersedia; runtime cluster belum diuji |
 | Tests bisnis dan pengujian beban | Belum ada hasil yang dikonfirmasi |
 
 Prioritas: putuskan isu terbuka, siapkan database/config development, implementasikan Product → Cart → Order → Payment, lalu uji kontrak dan integrasi. Stock reservation, idempotency, dan verifikasi pembayaran final memerlukan rancangan lanjutan.
@@ -456,3 +456,15 @@ Prioritas: putuskan isu terbuka, siapkan database/config development, implementa
 - [Decisions](docs/decisions.md): keputusan yang sudah dipilih dan yang masih terbuka.
 
 Contoh ID dan nominal pada panduan ini adalah ilustrasi. Sesuaikan dengan fixture dan gunakan identifier yang dikembalikan aplikasi saat menjalankan pengujian.
+
+## Build image dan template deployment
+
+Empat Dockerfile tersedia pada tiap folder service dan Helm chart aplikasi di `deploy/helm/ecommerce/`. Command berikut sama pada Windows PowerShell dan Linux Bash, dari root repository dengan Docker Linux container engine aktif:
+
+```console
+docker build -f services/product-service/Dockerfile -t ecommerce/product-service:0.1.0-local .
+helm lint deploy/helm/ecommerce
+helm template abl deploy/helm/ecommerce --namespace ecommerce --output-dir rendered
+```
+
+Lihat [panduan deployment Windows dan Linux](docs/deployment.md) untuk prasyarat, build semua image, konfigurasi database/Secret, dan langkah cluster nanti. Template belum membuktikan workload atau API bisnis berjalan.

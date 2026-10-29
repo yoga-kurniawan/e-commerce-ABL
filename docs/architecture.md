@@ -378,9 +378,9 @@ Konfigurasi datasource/environment per terminal dijelaskan pada [development.md]
 
 ### Target deployment berikutnya
 
-Rancangan memakai Docker image per service, Kubernetes Service/DNS, Istio ingress/mesh, serta Helm untuk aplikasi. Semua aplikasi dapat memakai container port 8080 pada Pod berbeda. Namespace, resource budget, Secret, image tag/digest, probes, dan policy mesh ditentukan ketika setup deployment dimulai.
+Rancangan memakai Docker image per service, Kubernetes Service/DNS, Istio ingress/mesh, serta Helm untuk aplikasi. Semua aplikasi dapat memakai container port 8080 pada Pod berbeda. Template awal aplikasi tersedia di `deploy/helm/ecommerce/`: satu replica per service, container port 8080, ClusterIP, resource budget awal, referensi Secret, dan health probes. Namespace ditentukan melalui Helm; image, database host, kredensial, serta resource budget perlu disesuaikan per lingkungan. Policy mesh disiapkan pada tahap Istio.
 
-Deployment cluster merupakan tahap pengembangan berikutnya. Folder `deploy/` dan `scripts/` menampung konfigurasi serta otomatisasinya. Kesiapan database, mTLS, telemetry backend, dan workload cluster belum diverifikasi. Mesh transport tetap memerlukan otorisasi pengguna dan aturan bisnis pada aplikasi.
+Deployment cluster merupakan tahap pengembangan berikutnya. Folder `deploy/` dan `scripts/` menampung konfigurasi serta otomatisasinya. Dockerfile tersedia pada tiap service; cara build dan penggunaan chart dijelaskan di [deployment.md](deployment.md). Kesiapan database, mTLS, telemetry backend, dan workload cluster belum diverifikasi. Mesh transport tetap memerlukan otorisasi pengguna dan aturan bisnis pada aplikasi.
 
 ## Pengujian dan manfaat rancangan
 
