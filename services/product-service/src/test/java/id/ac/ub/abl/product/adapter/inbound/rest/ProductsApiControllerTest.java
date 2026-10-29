@@ -47,6 +47,18 @@ class ProductsApiControllerTest {
     }
 
     @Test
+    void fractionalStockIsRejectedRatherThanSilentlyTruncated() throws Exception {
+        http.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Keyboard\",\"price\":1,\"stock\":1.5}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        assertEquals(0, repository.count());
+        long id = createProduct();
+        http.perform(patch(BASE + "/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{\"stock\":1.5}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        assertEquals(20, repository.findById(id).orElseThrow().getStock());
+    }
+
+    @Test
     void missingProductsReturn404ForReadReplacePatchAndDelete() throws Exception {
         String path = BASE + "/" + Long.MAX_VALUE;
         http.perform(get(path)).andExpect(status().isNotFound())

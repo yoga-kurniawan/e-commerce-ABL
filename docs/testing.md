@@ -4,7 +4,7 @@
 
 ## 1. Status dan tujuan
 
-Dokumen ini adalah rencana pengujian, bukan laporan hasil. Berdasarkan progres developer, `./mvnw validate` telah berhasil. Belum ada bukti tests bisnis, eksekusi 17 operasi, atau load test selesai.
+Dokumen ini berisi rencana pengujian bersama. Hasil aktual Product tersedia pada [hasil pengujian Product](product-service-testing.md): 80 tests lulus melalui `verify` per module, termasuk enam operasi HTTP dan PostgreSQL terisolasi. Eksekusi gabungan 17 operasi lintas service dan load test belum selesai.
 
 Laporan h. 25 dan 45 menjelaskan pemeriksaan kontrak menggunakan Swagger Editor. Contoh request/response dinyatakan sebagai ilustrasi pada h. 16. Validasi kontrak tidak membuktikan aplikasi mematuhi kontrak atau pembayaran selesai.
 

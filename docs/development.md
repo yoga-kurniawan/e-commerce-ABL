@@ -123,7 +123,7 @@ Lokasi migrasi: `services/<service>-service/src/main/resources/db/migration/`.
 - Flyway mengelola perubahan skema; Hibernate validate memeriksa mapping JPA.
 - Domain bisnis berbeda dari JPA entity; relasi/FK hanya dalam database layanan yang sama.
 - Source service, migrasi, dan test belum otomatis dilengkapi oleh setup database ini.
-- Generated context test memerlukan konfigurasi datasource pengujian. Jangan menjalankan tests terhadap database development berisi data penting tanpa mengatur isolasi fixture/profile.
+- Context test Product sudah menyediakan datasource PostgreSQL terisolasi melalui Testcontainers, termasuk test server HTTP pada port acak. Test service lain masih memerlukan konfigurasi datasource pengujian. Jangan menjalankan tests terhadap database development berisi data penting tanpa mengatur isolasi fixture/profile.
 
 Pengembangan domain/unit test tidak membutuhkan cluster. Lihat [testing.md](testing.md) untuk rencana tests dan [decisions.md](decisions.md) untuk aturan bisnis yang belum ditentukan.
 
