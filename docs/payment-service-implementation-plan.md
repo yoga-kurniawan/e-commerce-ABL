@@ -1,8 +1,8 @@
 # Tahapan, skill, dan prompt implementasi Payment Service
 
-Dokumen ini adalah rencana pekerjaan, bukan hasil implementasi.
+Dokumen ini memuat rencana pekerjaan dan status implementasi berdasarkan hasil pengujian.
 
-Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain), tahap 2 (commands, ports, tipe aplikasi), dan tahap 3 (migrasi/JPA entities) selesai dengan 91 tests gabungan lulus: 62 unit dan 29 tests schema/mapping pada PostgreSQL 17.11 terisolasi. Rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 4 (repository) selesai dengan total 103 tests lulus, termasuk 12 tests repository PostgreSQL. Tahap 5 (mapper/persistence adapter) selesai dengan 117 tests gabungan lulus. Tahap 6 (Order REST adapter) selesai dengan 155 tests gabungan lulus. Tahap 7 (use cases) selesai dengan 183 tests gabungan lulus. Tahap 8 (HTTP/encoder/simulator) selesai dengan 242 tests gabungan lulus. Tahap 9 (exception handler) selesai dengan 295 tests gabungan lulus, termasuk 53 tests handler. Verifikasi aplikasi gabungan tahap 10 belum dikerjakan.
+Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain), tahap 2 (commands, ports, tipe aplikasi), dan tahap 3 (migrasi/JPA entities) selesai dengan 91 tests gabungan lulus: 62 unit dan 29 tests schema/mapping pada PostgreSQL 17.11 terisolasi. Rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 4 (repository) selesai dengan total 103 tests lulus, termasuk 12 tests repository PostgreSQL. Tahap 5 (mapper/persistence adapter) selesai dengan 117 tests gabungan lulus. Tahap 6 (Order REST adapter) selesai dengan 155 tests gabungan lulus. Tahap 7 (use cases) selesai dengan 183 tests gabungan lulus. Tahap 8 (HTTP/encoder/simulator) selesai dengan 242 tests gabungan lulus. Tahap 9 (exception handler) selesai dengan 295 tests gabungan lulus, termasuk 53 tests handler. Tahap 10 selesai: clean verify tanpa selector lulus 309 tests dengan PostgreSQL disposable dan HTTP stub Order; integrasi Order nyata serta deployment belum diuji.
 
 Acuan urutan: bagian 4 dan 5 pada `.codex/alur-pekerjaan-developer-setiap-service.md`. Acuan perilaku: [decisions.md](decisions.md), khususnya DEC-012 sampai DEC-017, [business-rules.md](business-rules.md), dan [OpenAPI](../specs/openapi.yaml). Alur lama dipertahankan; idempotency dan simulator ditambahkan sesuai keputusan terbaru. Rujukan historis di `.codex` tidak menggantikan kontrak/keputusan terbaru.
 
@@ -302,6 +302,8 @@ Jalankan controller/handler tests dan periksa status serta body aktual.
 ## Tahap 10 — Verifikasi gabungan
 
 Hasil: bukti terukur bahwa Payment bekerja dengan PostgreSQL dan stub Order.
+
+Status: selesai, 30 Oktober 2026. Aplikasi diuji melalui HTTP nyata pada port acak dengan PostgreSQL 17.11 disposable dan HTTP stub Order. PaymentFlowIntegrationTest mencakup 13 tests; PaymentApplicationTests menjalankan satu test aplikasi dengan simulator nonaktif. Maven clean verify tanpa selector lulus 309 tests, 0 failures/errors/skipped, dan menghasilkan executable JAR. Termasuk replay, concurrency, rollback encoder dan fault pengiriman respons setelah commit. Integrasi Order nyata, peluncuran JAR/image, deployment dan runtime Java 17 belum diuji. Command, environment dan batas bukti ada pada [payment-service-testing.md](payment-service-testing.md).
 
 ```text
 Gunakan $testing-pyramid.

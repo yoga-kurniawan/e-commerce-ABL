@@ -1,8 +1,38 @@
-# Hasil verifikasi Payment — tahap 1–9
+# Hasil verifikasi Payment — tahap 1–10
 
-Tanggal: 29–30 Oktober 2026. Mencakup unit tests domain/aplikasi, tests persistence PostgreSQL dan client HTTP terisolasi, belum verifikasi aplikasi Payment lengkap.
+Tanggal: 29–30 Oktober 2026. Mencakup unit/slice tests dan verifikasi aplikasi Payment dengan PostgreSQL disposable serta HTTP stub Order. Integrasi Order nyata dan deployment belum diuji.
 
-## Verifikasi terbaru — tahap 9 exception handler
+## Verifikasi terbaru — tahap 10 aplikasi gabungan
+
+Working tree di atas commit `41800ba`, selesai 30 Oktober 2026 pukul 01:03:50 +07:00. Acuan teknis tetap payment-service-technical-design.md; file payment-service-technical-plan.md tidak tersedia. Command aktual final:
+
+```powershell
+& 'C:/Users/USER/.m2/wrapper/dists/apache-maven-3.9.6-bin/3311e1d4/apache-maven-3.9.6/bin/mvn.cmd' -U '-Dmaven.repo.local=C:/Users/USER/.m2/repository' -pl services/payment-service -am clean verify > payment-stage10-verify.log 2>&1
+exit $LASTEXITCODE
+```
+
+**BUILD SUCCESS, exit 0; 309 tests, 0 failures, 0 errors, 0 skipped.** Seluruh tests Payment dijalankan tanpa selector maupun skip; parent dan Payment merupakan reactor yang diperlukan. Integration tests menggunakan nama *Test sehingga dijalankan Surefire pada lifecycle test sebelum packaging/verify, tanpa menambahkan Failsafe. Total terdiri dari 295 tests sebelumnya, 13 PaymentFlowIntegrationTest dan satu PaymentApplicationTests yang sebelumnya belum dijalankan. Jumlah diperiksa kembali dari XML Surefire. Spring Boot repackage menghasilkan `services/payment-service/target/payment-service-0.1.0-SNAPSHOT.jar` dengan dependency pada BOOT-INF. JAR belum diuji melalui proses java -jar tersendiri.
+
+Environment aktual: Windows, Maven 3.9.6, runtime Maven/Surefire Java 22.0.2, compile release 17, Boot 4.1.2, Spring Web 7.0.10, Jackson 3.1.7, Hibernate 7.4.13.Final, Testcontainers 2.0.5, Docker Engine 29.4.0 dan PostgreSQL 17.11 dari image postgres:17. Runtime Java 17 belum diuji. Log final berada di root repository (di luar target yang dibersihkan); laporan XML berada di target/surefire-reports. Versi dependency/POM tidak diubah.
+
+Desain pengujian dan bukti:
+
+- PaymentIntegrationSupport menjalankan aplikasi Spring Boot/Tomcat pada port acak dengan bind 127.0.0.1. RestTestClient mengirim HTTP nyata; use cases, handler, HTTP mapper, client Order, transaksi, repository, Flyway dan PostgreSQL benar-benar dijalankan. Stub Order memakai HttpServer JDK di loopback/port acak dan mencatat request. Datasource diarahkan secara eksplisit ke container, dan cleanup TRUNCATE menolak berjalan jika metadata URL tidak sama dengan URL container. Tidak mengakses database development.
+- Dua skenario lifecycle SUCCESS/FAILED memverifikasi POST 201/PENDING, GET, PATCH reference dengan whitespace utuh, serta amount 350000.12500 pada HTTP dan NUMERIC. Simulator mempertahankan amount/reference; hasil final identik menghasilkan body sama tanpa perubahan version/created_at/updated_at. Hasil berlawanan dan PATCH terminal ditolak 409. Setelah FAILED, attempt/key baru dengan metode TRANSFER berhasil; setelah SUCCESS, attempt baru ditolak ORDER_ALREADY_PAID.
+- Replay setelah PATCH dan perubahan status tetap mengirim body create awal secara persis, tanpa reference baru atau state terminal. Stub kemudian dibuat mengembalikan 500: replay tetap berhasil tanpa lookup tambahan. Seluruh lookup yang tercatat hanya GET Order, tidak ada write Order.
+- Key wajib dan field amount dari client ditolak 400 sebelum klaim/lookup. Key sama dengan orderId atau method berbeda menghasilkan IDEMPOTENCY_KEY_REUSED; key berbeda untuk Order dengan PENDING mendapat PAYMENT_ALREADY_PENDING. Klaim konflik tidak tersimpan sebagai hasil replay.
+- Latch menahan lookup request pertama setelah klaim PROCESSING benar-benar commit. Duplikat key/payload sama mendapat REQUEST_IN_PROGRESS 409 tanpa Payment parsial; payload berbeda tetap mismatch. Setelah latch dilepas, request pertama dan retry mengembalikan 201/body yang sama, dengan satu Payment. Latch kedua menyinkronkan dua key berbeda untuk Order sama: satu 201, satu 409 (attempt aktif atau lock sibuk), satu Payment dan satu hasil COMPLETED. Tidak memakai sleep untuk mengatur race. Read timeout Order khusus tests ini 15s untuk memberi ruang gate 10s; default produksi tetap 5s, connect 2s.
+- Order 404/500 dan status CONFIRMED/CANCELLED menghasilkan error sesuai kontrak tanpa Payment atau klaim tersisa. Setelah upstream pulih, key yang sama dapat digunakan untuk retry. Spy pada encoder produksi hanya menginjeksi satu exception sesudah INSERT/flush: transaksi rollback dan klaim dilepas; retry berikutnya memakai serialisasi produksi dan menyimpan satu Payment. Pada seluruh skenario normal spy menjalankan implementasi encoder asli; tidak ada mock use case, database atau OrderLookup.
+- Filter khusus test menampung respons sukses setelah transaksi nyata selesai, lalu menggantinya dengan 503 TEST_RESPONSE_FAILURE. Database tetap berisi Payment dan snapshot COMPLETED; retry key sama memperoleh status 201 dan body tersimpan persis, tanpa lookup/Payment tambahan. Filter hanya diimpor oleh integration test dan tidak masuk aplikasi produksi. Ini fault injection pada pengiriman respons setelah commit, bukan pemutusan socket/jaringan nyata atau hilangnya acknowledgment commit PostgreSQL. Fault acknowledgment commit pada tests adapter tahap 5 tetap lulus sebagai regresi terpisah.
+- PaymentApplicationTests kini menguji aplikasi dengan flag simulator false dan PostgreSQL disposable: POST/GET publik berjalan, route simulator mengembalikan 404/code-message dan Payment tetap PENDING. Matrix profil/flag/token/loopback yang lebih luas tetap dicakup tests tahap 8. Test context ditutup setelah setiap class sebelum container dihentikan.
+
+Riwayat verifikasi tambahan: run terfokus awal (`-o -pl services/payment-service -am -Dtest=PaymentFlowIntegrationTest,PaymentApplicationTests test`, dengan repo lokal seperti di atas) menjalankan 14 tests, satu gagal karena filter test memakai getWriter setelah output stream dipakai. Stack trace Tomcat menunjuk filter test; perbaikan menggunakan output stream. Run terfokus `-Dtest=PaymentFlowIntegrationTest#create_whenResponseFailsAfterCommit_shouldReplayOriginalStoredBodyWithoutDuplicate test` lulus satu test pada 00:56:57 +07:00 (log payment-stage10-response-test.log). Percobaan clean verify offline meluluskan seluruh 309 tests tetapi gagal packaging karena class Plexus FileSet untuk maven-jar-plugin belum tersedia dalam graph dependency cache. Run final dengan -U melengkapi dependency plugin melalui Maven Central, kemudian lulus clean verify tanpa perubahan versi/POM. Warning lock timeout, startup simulator invalid dan error encoder merupakan skenario negatif yang memang diuji.
+
+File berubah: `src/test/java/id/ac/ub/abl/payment/integration/PaymentIntegrationSupport.java`, `integration/PaymentFlowIntegrationTest.java`, dan `PaymentApplicationTests.java` pada module Payment; dokumentasi implementation-plan, technical-design, architecture, serta laporan ini. Tidak ada perubahan source produksi, migrasi, OpenAPI atau konfigurasi deployment pada tahap 10.
+
+Batas hasil: verifikasi ini menggabungkan aplikasi Payment dan PostgreSQL nyata dengan stub HTTP Order, bukan Order Service sungguhan. Tidak membuktikan provider pembayaran, transfer uang, sinkronisasi Order, refund, kegagalan jaringan/socket nyata, DNS/TLS/cluster, deployment/container image atau runtime Java 17. Maven verify membangun executable JAR; pengujian aplikasi memakai classpath test dan bukan peluncuran JAR/image secara terpisah. Tahap 10 baseline terisolasi selesai; integrasi Order nyata dan deployment tetap pekerjaan lanjutan.
+
+## Riwayat tahap 9 exception handler
 
 Working tree di atas commit `96c7c55`, 30 Oktober 2026. Tiga file tahap 9 sudah ada sebagai untracked saat pekerjaan dimulai; implementasi tersebut ditinjau, dilengkapi, dan diuji sesuai kontrak. Tidak ada dependency/POM, domain, use case, migrasi, atau OpenAPI yang diubah. Command aktual:
 
