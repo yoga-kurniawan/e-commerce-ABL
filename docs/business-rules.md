@@ -84,6 +84,8 @@ Ketentuan sumber, h. 14–15, 23, 27–28, 34–35, 43:
 - Total dan status pembayaran tidak boleh diubah bebas melalui PATCH ini.
 - PUT dan DELETE Order tidak disediakan pada rancangan awal.
 
+Keputusan project DEC-012 (menunggu review): harga satuan Order diturunkan dari subtotal/quantity Cart; nama produk dan stok dibaca dari Product saat checkout. Cart tidak ada 404; Cart kosong, customerId berbeda, produk tidak tersedia, atau stok kurang 409; dependency gagal 503. PATCH alamat hanya saat PENDING (selain itu 409), dan shippingAddress ditambahkan pada respons Order sebagai nullable.
+
 Harga checkout mengikuti harga tersimpan pada Cart (OPEN-003 B), bukan harga katalog terbaru. Belum diputuskan: status persis yang boleh mengubah alamat, Cart kosong, validasi kepemilikan customer, masa berlaku harga, pembekuan Cart, snapshot internal, stock reservation, dan penanganan request create berulang. Policy hanya-PENDING adalah usulan yang perlu disepakati, bukan ketentuan eksplisit laporan.
 
 Rancangan APS V3 mengusulkan snapshot item/harga di Order dan lookup Product untuk field yang tidak tersedia lengkap pada Cart. Jangan menganggap usulan model internal ini sudah menjadi schema respons publik.

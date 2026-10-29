@@ -249,6 +249,7 @@ paths:
         - 'Orders'
       summary: 'Membuat pesanan baru'
       operationId: 'createOrder'
+      description: 'Pesanan dibentuk dari Cart milik customerId yang sama. Harga item memakai harga tersimpan pada Cart (OPEN-003 B); nama produk dan stok dibaca dari Product saat checkout. Pemeriksaan stok bukan reservasi (OPEN-004). Cart tidak dikosongkan otomatis (DEC-012).'
       requestBody:
         required: true
         content:
@@ -264,6 +265,20 @@ paths:
                 $ref: '#/components/schemas/Order'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '404':
+          description: 'Keranjang tidak ditemukan'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 'Keranjang kosong, bukan milik customerId, berisi produk yang tidak lagi tersedia, atau stok tidak mencukupi'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /orders/{orderId}:
     get:
       tags:
@@ -290,6 +305,7 @@ paths:
         - 'Orders'
       summary: 'Memperbarui atribut pesanan yang diizinkan'
       operationId: 'updateOrder'
+      description: 'Hanya shippingAddress yang dapat diubah, dan hanya saat status PENDING (DEC-012). Null eksplisit, string kosong, dan body tanpa shippingAddress ditolak; atribut lain diabaikan.'
       parameters:
         - name: 'orderId'
           in: 'path'
@@ -309,12 +325,20 @@ paths:
       responses:
         '200':
           description: 'Pesanan berhasil diperbarui'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 'Perubahan tidak diizinkan'
+          description: 'Perubahan tidak diizinkan berdasarkan status pesanan'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /payments:
     post:
       tags:
@@ -606,6 +630,11 @@ components:
             - 'CONFIRMED'
             - 'CANCELLED'
           example: 'PENDING'
+        shippingAddress:
+          type: 'string'
+          nullable: true
+          description: 'Alamat pengiriman; null sampai diisi melalui PATCH (API-001).'
+          example: 'Jl. Veteran No. 10, Malang'
     PaymentInput:
       type: 'object'
       required:
@@ -663,6 +692,12 @@ components:
             $ref: '#/components/schemas/Error'
     NotFound:
       description: 'Data tidak ditemukan'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    DependencyUnavailable:
+      description: 'Layanan dependency tidak dapat dihubungi atau memberi respons tidak valid'
       content:
         application/json:
           schema:

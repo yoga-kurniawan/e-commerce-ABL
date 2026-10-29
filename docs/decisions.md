@@ -32,13 +32,13 @@ Penerapan suatu keputusan juga berbeda dari status operasional: memilih PostgreS
 | OPEN-003 | Harga mana yang berlaku saat checkout? | Pilihan 3B disetujui pengguna pada 29 Oktober 2026 | Diterima: gunakan harga yang disimpan saat produk masuk Cart | Cart perlu menyimpan harga satuan; Order memakai harga Cart; detail masa berlaku dan penambahan ulang masih terbuka |
 | OPEN-004 | Kapan stok direservasi/dikurangi? | Validasi stok disebut; workflow atomik lintas layanan belum ada | Reservation saat checkout/payment atau workflow lain | Risiko overselling dan compensation tidak terdefinisi |
 | OPEN-005 | Bagaimana menjaga riwayat Product? | Diselesaikan oleh DEC-011 | Soft delete melalui status aktif internal | Data produk tetap tersimpan; lihat keputusan di bawah |
-| OPEN-006 | Status mana yang boleh mengubah alamat? | Laporan h. 35 mencontohkan sebelum diproses | Hanya PENDING atau state rule yang ditetapkan tim | Handler/state tests tidak dapat dipatok |
+| OPEN-006 | Status mana yang boleh mengubah alamat? | Laporan h. 35 mencontohkan sebelum diproses | Diterapkan pada DEC-012: hanya PENDING, status lain 409 | Menunggu review tim; transisi status lain belum ditetapkan |
 | OPEN-007 | Bagaimana pembayaran diverifikasi? | Laporan h. 37 mengharuskan sumber backend/provider yang dipercaya | Mock terkontrol untuk praktikum atau integrasi provider | SUCCESS/FAILED belum punya alur sah |
 | OPEN-008 | Apakah satu Order boleh memiliki beberapa Payment attempt? | Belum ada policy attempt | Satu request aktif atau beberapa attempt dengan aturan | Constraint UNIQUE(order_id) dan retry belum dapat dipilih |
 | OPEN-009 | Bagaimana idempotency create Order/Payment? | Belum ada kontrak/penyimpanan idempotency | Key, penyimpanan hasil, dan aturan pengulangan yang disepakati | Retry dapat menggandakan transaksi |
 | OPEN-010 | Bagaimana identitas/kepemilikan customer dibuktikan? | Input customerId belum mendefinisikan autentikasi | Fixture lokal atau rancangan auth/otorisasi | ID client tidak dapat dianggap identitas terverifikasi |
 | OPEN-011 | Presisi uang, pembulatan, panjang nama, dan batas ID? | Schema belum mengatur semua detail | BigDecimal/NUMERIC dan aturan skala yang disepakati | DTO, SQL, dan total dapat tidak selaras |
-| OPEN-012 | Apakah snapshot item disimpan pada Order? | Diusulkan APS V3; schema internal belum diberikan laporan | Simpan item/nama/harga saat create dengan policy harga | Riwayat dan audit perhitungan perlu desain eksplisit |
+| OPEN-012 | Apakah snapshot item disimpan pada Order? | Diusulkan APS V3; schema internal belum diberikan laporan | Diterapkan pada DEC-012: `order_items` menyimpan productId, nama, quantity, dan harga satuan Cart | Item bersifat internal; belum diekspos pada respons publik |
 
 Baris berstatus diterima merupakan keputusan pengguna untuk project, bukan bukti persetujuan seluruh tim atau implementasi selesai. Opsi pada baris lainnya belum disetujui. ID OPEN dipertahankan agar referensi tetap dapat ditelusuri. Rincian keputusan yang diterima dicatat di bawah.
 
@@ -84,7 +84,7 @@ README, business-rules, architecture, testing, dan OpenAPI diperbarui untuk menc
 
 | ID | Temuan | Perubahan yang dibahas | Status |
 |---|---|---|---|
-| API-001 | shippingAddress hanya terlihat pada contoh/PATCH, belum pada schema Order awal | Tambahkan atribut response bila menjadi kontrak yang diimplementasikan | Belum diputuskan |
+| API-001 | shippingAddress hanya terlihat pada contoh/PATCH, belum pada schema Order awal | Tambahkan atribut response bila menjadi kontrak yang diimplementasikan | Diterapkan pada DEC-012 (nullable), menunggu review |
 | API-002 | transactionReference belum pada schema Payment awal | Selaraskan schema respons dengan perilaku PATCH | Belum diputuskan |
 | API-003 | Response 200 tambahan Cart/Order/Payment hanya description pada YAML | Definisikan schema berdasarkan narasi/keputusan final | Belum diputuskan |
 | API-004 | PATCH tidak menetapkan additionalProperties false | Tentukan penolakan field asing dan null semantics | Belum diputuskan; narasi membatasi atribut yang boleh diubah |
@@ -114,6 +114,20 @@ Jangan menganggap response tanpa `content` di schema harus tanpa body. Narasi me
 - Tidak ada lookup transaksi lintas service pada delete. Status 409 tetap tercantum dalam kontrak sumber, tetapi belum memiliki kondisi bisnis pada policy ini.
 - Penyimpanan baris mempertahankan data terakhir, bukan audit seluruh perubahan harga/stok. Snapshot Order tetap diperlukan untuk riwayat transaksi.
 - Bukti yang diuji: migrasi V1 ke V2 mempertahankan produk lama sebagai aktif; soft delete menyembunyikan produk dari port dan mempertahankan baris serta atributnya.
+
+## DEC-012: Aturan checkout dan perubahan Order
+
+- Status: diterapkan pada branch `feat/order-service`, 29 Oktober 2026; menunggu review tim.
+- Dasar: laporan h. 14 (POST/GET Order), h. 34–35 (PATCH alamat), OPEN-003 B, OPEN-006, OPEN-012, dan API-001.
+- POST `/orders` membaca Cart melalui `GET /api/v1/carts/{cartId}`. customerId request harus sama dengan customerId Cart; ini pencocokan referensi, bukan autentikasi (OPEN-010 tetap terbuka).
+- Harga satuan item = subtotal Cart / quantity, yaitu harga tersimpan saat produk masuk Cart (OPEN-003 B). Kontrak Cart tidak diubah. Total Order = jumlah subtotal item.
+- Setiap produk dibaca dari Product untuk nama snapshot dan pemeriksaan stok. Produk tidak ada/nonaktif atau stok kurang dari quantity menghasilkan 409. Pemeriksaan ini bukan reservasi stok (OPEN-004).
+- Pemetaan error POST: Cart tidak ada 404; Cart kosong, customer berbeda, produk tidak tersedia, stok kurang 409; Cart/Product tidak dapat dihubungi atau respons tidak valid 503. Status 404/409/503 ditambahkan pada OpenAPI.
+- Order baru berstatus PENDING dengan shippingAddress null. Snapshot item disimpan pada `order_items` dan tidak dihitung ulang dari katalog.
+- PATCH hanya mengubah shippingAddress, hanya saat PENDING; status lain 409. Null eksplisit, string kosong, dan body tanpa shippingAddress ditolak 400. Atribut lain seperti total/status diabaikan, tidak mengubah data.
+- Respons Order menambahkan shippingAddress (nullable). Respons PATCH 200 memakai schema Order.
+- Lookup HTTP dilakukan di luar transaksi database; Order dan item disimpan dalam satu transaksi lokal.
+- Belum diputuskan: pengosongan/penguncian Cart setelah checkout, idempotency create Order (OPEN-009), transisi PENDING ke CONFIRMED/CANCELLED, dan optimistic locking.
 
 ## 6. Template keputusan berikutnya
 
