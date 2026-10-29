@@ -1,6 +1,6 @@
 # Desain teknis Payment Service — tahap 0
 
-Desain awal: tahap 0, 29 Oktober 2026; dilengkapi catatan implementasi tahap 1–3. Domain, commands/ports, migrasi, dan JPA entities sudah tersedia. Repository, persistence adapter, use case, client Order, dan endpoint belum diimplementasikan. Acuan: DEC-012–DEC-018 pada [decisions.md](decisions.md), [alur implementasi](payment-service-implementation-plan.md), [kontrak publik](../specs/openapi.yaml), dan [kontrak simulator](../specs/payment-simulator.openapi.yaml). Hasil verifikasi aktual dicatat pada [payment-service-testing.md](payment-service-testing.md).
+Desain awal: tahap 0, 29 Oktober 2026; dilengkapi catatan implementasi tahap 1–4. Domain, commands/ports, migrasi, JPA entities, dan repository sudah tersedia. Persistence adapter, use case, client Order, dan endpoint belum diimplementasikan. Acuan: DEC-012–DEC-018 pada [decisions.md](decisions.md), [alur implementasi](payment-service-implementation-plan.md), [kontrak publik](../specs/openapi.yaml), dan [kontrak simulator](../specs/payment-simulator.openapi.yaml). Hasil verifikasi aktual dicatat pada [payment-service-testing.md](payment-service-testing.md).
 
 ## 1. Batas dan komponen
 
@@ -63,6 +63,25 @@ Schema di bawah diwujudkan pada `V1__create_payment_storage.sql` di Payment Serv
 - `order_id`, method, fingerprint pada catatan klaim tidak berubah melalui update JPA biasa. Penggantian key expired untuk request baru nantinya memerlukan delete/insert atau SQL atomik di bawah lock; tidak cukup mengganti payload pada instance lama.
 - Metode entity hanya assignment state penyimpanan. Pemeriksaan pemilik, fencing, lease, policy bisnis, urutan lock, dan finalisasi atomik belum diimplementasikan. Partial index tidak sendirian melarang semua transisi ilegal atau setiap attempt baru setelah SUCCESS; adapter/domain tetap wajib menegakkan policy lengkap.
 - Konfigurasi runtime memakai `ddl-auto=validate`, Flyway aktif, baseline otomatis/out-of-order nonaktif. Tidak memakai Hibernate untuk membuat atau mengubah schema.
+
+### Repository tahap 4 dan batas transaksi
+
+Repository berada langsung di `adapter.outbound.database`, mengikuti konvensi Product Service. Semuanya hanya mengekspos JPA entity lokal; usecase tetap memakai output port.
+
+| Komponen | Query/operasi |
+|---|---|
+| PaymentsRepository | findById; scalar findOrderIdById; existsByOrderIdAndStatus; findBlockingAttempt (PENDING/SUCCESS); findByIdForUpdate |
+| PaymentOrderGuardsRepository | insertIfAbsent (ON CONFLICT DO NOTHING); findByOrderIdForUpdate |
+| PaymentIdempotencyRepository | findById untuk inspect/snapshot; findByIdForUpdate; insertProcessingIfAbsent; deleteProcessingOwnedBy; deleteExpiredCompletedByKey; deleteExpiredCompletedBatch |
+| PaymentDatabaseSession | clock_timestamp() sebagai Instant; configureLockTimeout(Duration) melalui set_config transaction-local |
+
+- Lock dan semua native mutation mewajibkan transaksi caller (`MANDATORY`), sehingga lock tidak hilang akibat repository membuat transaksi pendek sendiri. Adapter tahap 5 harus memanggil `configureLockTimeout` sebelum insert/lock, dengan default rancangan 250 ms. PostgreSQL lock_timeout dipakai secara nyata; bukan mengandalkan hint JPA timeout positif yang belum tentu diterapkan dialect. Nilai nol ditolak karena PostgreSQL menafsirkannya sebagai timeout dinonaktifkan. Budget berlaku per perolehan lock, bukan deadline total transaksi.
+- Urutan finalisasi tetap idempotency → guard → Payment; PATCH/result guard → Payment. `findById` dan scalar lookup tidak mengambil write lock. `findBlockingAttempt` bukan lock/claim atomik; policy wajib diperiksa setelah lock guard. Lock query yang menghasilkan empty tidak mengunci baris yang belum ada; gunakan insert ON CONFLICT lebih dahulu untuk claim/guard.
+- Insert klaim menghasilkan count 1/0, tanpa mengubah pemilik/payload lama. Caller membandingkan payload, state, expiry, lease, dan owner token; takeover memakai entity managed di bawah lock serta @Version. Insert tidak memberikan hasil replay atau melakukan lookup Order. Lease dihitung database; caller wajib memvalidasi durasi positif.
+- findById catatan idempotency menyertakan snapshot awal tanpa join ke Payment terkini. Caller harus memeriksa expiry/payload sebelum replay. Reconciliation memakai transaksi/koneksi baru; Optional.empty bukan pengganti kegagalan membaca database.
+- Cleanup menggunakan CTE PostgreSQL, LIMIT dan FOR UPDATE SKIP LOCKED, hanya COMPLETED expired; Payment/PROCESSING tetap ada. Caller wajib memvalidasi batchSize positif dan menyediakan transaksi cleanup terpisah. Penggantian key expired mengunci baris, conditional delete, lalu insert baru dalam satu transaksi.
+- Native SQL sengaja dipakai untuk ON CONFLICT, clock/timeout PostgreSQL, dan cleanup terbatas. Operasi bulk melewati persistence context JPA: flush perubahan relevan sebelum bulk dan detach/clear entity terdampak sebelum membacanya lagi. Jangan melakukan clear sembarangan saat ada perubahan Payment yang belum di-flush. Repository tidak otomatis membuka transaksi REQUIRES_NEW atau membersihkan seluruh context.
+- Release klaim membatasi state PROCESSING dan owner_token. Pemanggilan hanya sah setelah rollback finalisasi dipastikan; repository tidak dapat membuktikan hasil commit. Encoder respons, penyelesaian snapshot, fencing, mapping error HTTP, serta implementasi port tetap tahap 5 dan berikutnya.
 
 ## 4. Klaim, transaksi, dan recovery
 
@@ -131,4 +150,4 @@ Simbol exception transport/SQL dipetakan adapter; core memakai exception aplikas
 - Mapping JPA/JSON mempertahankan pecahan; tests menegaskan reference dan state terminal serta no-op final identik.
 - Simulator benar-benar tidak ada pada profil/default yang tidak diizinkan, prod override, flag false, dan token invalid; tes startup memeriksa loopback/token.
 
-Verifikasi tahap 0: kontrak publik dan simulator telah lolos validator OpenAPI; ini validasi spesifikasi, bukan bukti runtime. Tahap 1–2 memiliki 62 unit tests; tahap 3 menambahkan tests migrasi/constraint dan mapping JPA dengan PostgreSQL 17 terisolasi. Lihat command, hasil, dan batas aktual pada [hasil tests](payment-service-testing.md). Protokol klaim, transaksi adapter, locking guard/fencing, client, dan endpoint belum memiliki implementasi/bukti runtime. Urutan berikutnya adalah repository (tahap 4), lalu adapter, use case, HTTP, handler, dan verifikasi gabungan.
+Verifikasi tahap 0: kontrak publik dan simulator telah lolos validator OpenAPI; ini validasi spesifikasi, bukan bukti runtime. Tahap 1–4 memiliki 103 tests lulus: 62 unit, 29 schema/mapping, dan 12 repository dengan PostgreSQL 17 terisolasi. Tests repository membuktikan query dan kontensi lock, bukan protokol klaim/transaksi adapter/fencing yang belum diimplementasikan. Lihat command, hasil, dan batas aktual pada [hasil tests](payment-service-testing.md). Berikutnya tahap 5 (mapper/adapter), lalu client, use case, HTTP, handler, dan verifikasi gabungan.

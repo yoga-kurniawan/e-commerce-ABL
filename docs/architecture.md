@@ -356,6 +356,8 @@ Repository item terpisah bersifat opsional bila aggregate parent sudah mencukupi
 
 ## Transaksi dan konsistensi
 
+Tahap 4 Payment menambahkan PaymentsRepository, PaymentOrderGuardsRepository, PaymentIdempotencyRepository, serta helper PaymentDatabaseSession di outbound database adapter. Lock dan native mutation memerlukan transaksi caller; helper menyetel PostgreSQL lock_timeout transaction-local sebelum operasi. Query/locking telah diuji dengan PostgreSQL terisolasi; orkestrasi transaksi output port tetap tahap 5.
+
 Desain teknis Payment tersedia di [payment-service-technical-design.md](payment-service-technical-design.md): durable idempotency claim dengan lease/fencing, lookup Order di luar transaksi, finalisasi atomik Payment+snapshot replay, guard per Order, dan partial index untuk PENDING/SUCCESS. Tahap 3 menyediakan migrasi lokal `payments`, `payment_order_guards`, `payment_idempotency` serta JPA entities terpisah dari domain. Protokol transaksi/locking dan adapter tetap pekerjaan tahap berikutnya; hasil tests schema/mapping dicatat pada [payment-service-testing.md](payment-service-testing.md). Kontrak simulator lokal dipisahkan dari kontrak API bisnis publik.
 
 - `@Transactional` mengatur transaksi database lokal, bukan transaksi global Product–Cart–Order–Payment.

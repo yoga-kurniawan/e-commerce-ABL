@@ -1,8 +1,35 @@
-# Hasil verifikasi Payment — tahap 1–3
+# Hasil verifikasi Payment — tahap 1–4
 
 Tanggal: 29 Oktober 2026. Mencakup unit tests domain/tipe aplikasi dan tests schema/mapping PostgreSQL, belum verifikasi aplikasi Payment lengkap.
 
-## Verifikasi terbaru — tahap 3 migrasi dan JPA entities
+## Verifikasi terbaru — tahap 4 repository
+
+Working tree di atas commit `541fc89`, selesai 29 Oktober 2026 pukul 23:27:46 WIB. Command aktual (output diarahkan ke log sementara saat eksekusi):
+
+```powershell
+& 'C:\Users\USER\.m2\wrapper\dists\apache-maven-3.9.6-bin\3311e1d4\apache-maven-3.9.6\bin\mvn.cmd' -o '-Dmaven.repo.local=C:\Users\USER\.m2\repository' -pl services/payment-service -am '-Dtest=PaymentTest,OrderSnapshotTest,PaymentCommandsTest,PaymentApplicationTypesTest,PaymentSchemaTest,PaymentRepositoriesTest' test
+```
+
+Hasil akhir: **BUILD SUCCESS, 103 tests, 0 failures, 0 errors, 0 skipped**. PaymentRepositoriesTest 12; PaymentSchemaTest 29; domain/commands/tipe aplikasi 62. Environment tetap Maven 3.9.6, runtime Java 22.0.2, target Java 17, Boot 4.1.2, Hibernate 7.4.13.Final, PostgreSQL 17.11/Testcontainers 2.0.5. Tidak menguji runtime Java 17. Reports ada di `services/payment-service/target/surefire-reports`; log akhir disimpan di `services/payment-service/target/payment-stage4-test.log`.
+
+Tests baru menggunakan slice DataJpaTest dan database disposable terpisah; tidak mengakses database development. Cakupan:
+
+- Lookup ID, scalar Order ID, filter attempt PENDING/SUCCESS di antara riwayat FAILED, pengecekan status, hasil kosong, presisi amount dan reference persis.
+- Insert guard/klaim duplikat menghasilkan count 0 tanpa membuat transaksi aborted; payload/pemilik pertama tetap utuh, key beda huruf tetap berbeda, lease dihitung dari database.
+- Snapshot respons COMPLETED tetap PENDING sesudah Payment menjadi SUCCESS; lookup tidak mengambil state respons dari Payment terkini.
+- Conditional release tidak menghapus pemilik baru atau COMPLETED; key COMPLETED aktif tidak dianggap expired.
+- Cleanup berbatas batch hanya menghapus COMPLETED expired, mempertahankan PROCESSING meskipun lease usang, mempertahankan Payment, dan SKIP LOCKED melewati row yang sedang digunakan.
+- Conditional delete/insert key expired dibatalkan bersama saat rollback; snapshot semula kembali. Tests melakukan clear context setelah native replacement agar tidak membaca entity lama.
+- Kontensi nyata pada query lock Payment, guard, dan idempotency: dua transaksi pada thread/koneksi berbeda; pemegang lock dibuat lebih dahulu, pesaing memakai lock_timeout 250 ms dan menghasilkan SQLSTATE 55P03; setelah commit lock kembali dapat diambil. Tidak memakai sleep untuk menyusun race; Future dibatasi 10 detik.
+- Operasi lock/mutation ditolak tanpa transaksi caller; budget nol ditolak karena dapat menonaktifkan timeout PostgreSQL.
+
+Perbaikan selama verifikasi: hasil native query JPA perlu cast eksplisit ke Instant. Satu test awal menangkap exception validasi di dalam transaksi sehingga commit menghasilkan UnexpectedRollbackException; assertion dipindahkan ke luar batas transaksi. Semua tests lulus sesudah perbaikan. Log timeout SQLSTATE 55P03 adalah keluaran skenario kontensi yang memang diharapkan; warning Mockito/Byte Buddy bukan failure.
+
+Batas tahap 4: repository/helper belum mengimplementasikan PaymentStore, IdempotencyStore, atau PaymentCreationCommitter. Adapter berikutnya wajib menyetel lock budget sebelum operasi, menegakkan urutan lock, payload/lease/token/fencing, durasi/batch positif, no-op, dan rekonsiliasi commit. Bulk query melewati context JPA; caller mengelola flush serta entity terdampak. Tests tidak membuktikan fail-fast HTTP 409, transaksi finalisasi aplikasi, takeover antar-instance, encoder JSON, endpoint/simulator, ataupun integrasi Order nyata. Generated PaymentApplicationTests dan full Maven verify belum dijalankan.
+
+File baru: PaymentsRepository.java, PaymentOrderGuardsRepository.java, PaymentIdempotencyRepository.java, PaymentDatabaseSession.java, dan PaymentRepositoriesTest.java. Dokumentasi implementation-plan, technical-design, architecture, dan laporan ini diselaraskan. Migrasi/entities/domain/kontrak OpenAPI tidak diubah pada tahap 4.
+
+## Riwayat tahap 3 migrasi dan JPA entities
 
 Perubahan diuji pada working tree di atas commit `ceb6265`. Command aktual, selesai 23:18:32 WIB:
 
