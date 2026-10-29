@@ -1,8 +1,37 @@
-# Hasil verifikasi Payment — tahap 1–5
+# Hasil verifikasi Payment — tahap 1–6
 
 Tanggal: 29 Oktober 2026. Mencakup unit tests domain/tipe aplikasi dan tests schema/mapping PostgreSQL, belum verifikasi aplikasi Payment lengkap.
 
-## Verifikasi terbaru — tahap 5 persistence adapter
+## Verifikasi terbaru — tahap 6 Order REST adapter
+
+Working tree di atas commit `bea0624`, run gabungan selesai 29 Oktober 2026 pukul 23:54:15 WIB. Command aktual:
+
+```powershell
+& 'C:\Users\USER\.m2\wrapper\dists\apache-maven-3.9.6-bin\3311e1d4\apache-maven-3.9.6\bin\mvn.cmd' -o '-Dmaven.repo.local=C:\Users\USER\.m2\repository' -pl services/payment-service -am '-Dtest=OrderRestAdapterTest,OrderTransportFailureTest,PaymentPersistenceAdaptersTest,PaymentRepositoriesTest,PaymentSchemaTest,PaymentTest,OrderSnapshotTest,PaymentCommandsTest,PaymentApplicationTypesTest' test > services/payment-service/target/payment-stage6-test.log 2>&1
+exit $LASTEXITCODE
+```
+
+Hasil: **BUILD SUCCESS, exit 0, 155 tests, 0 failures, 0 errors, 0 skipped**. OrderRestAdapterTest 37 + OrderTransportFailureTest 1; tests tahap sebelumnya 117. Maven 3.9.6, runtime Java 22.0.2, compile release 17, Boot 4.1.2, Spring Web 7.0.10, PostgreSQL 17.11/Testcontainers untuk regresi database. Runtime Java 17 belum diuji. Starter-restclient ditambahkan mengikuti dependency management parent; build awal mengunduh dependency yang belum tersedia, tests memakai cache offline.
+
+Tests HTTP memakai Boot auto-configuration dan proxy @ImportHttpServices nyata, RestClient nyata, serta HttpServer JDK pada port loopback acak. Konfigurasi test menggunakan @TestConfiguration dan mengecualikan datasource; tidak memerlukan DB atau Order nyata. Property clients.order-url diarahkan ke port stub untuk membuktikan bridge URL dan prefix `/api/v1/orders/501`/GET. Tests tidak menambahkan dependency mock server baru.
+
+Setelah penandaan konfigurasi stub sebagai @TestConfiguration untuk mencegah component scanning pada aplikasi, kedua class HTTP diverifikasi ulang dengan selector `-Dtest=OrderRestAdapterTest,OrderTransportFailureTest`. Selesai 23:55:44 WIB: BUILD SUCCESS, exit 0, 38 tests lulus tanpa failure/error/skipped. Log: `services/payment-service/target/payment-stage6-http-test.log`. Ini pengulangan terfokus, bukan tambahan 38 tests unik di luar total 155.
+
+Bukti:
+
+- Amount 350000.12500 serta angka besar 123456789012345678901234567890.123456789 dipertahankan tanpa double. Total nol dan status CONFIRMED/CANCELLED tetap dapat dibaca sebagai snapshot; aturan payable berada di domain/use case.
+- 404 menjadi Optional.empty. Respons 400/401/403/409/429/500/502/503/504 tetap kegagalan upstream, bukan Order hilang atau timeout transport.
+- Empty/invalid JSON, null/array, field hilang/null/salah tipe, nominal negatif/nonfinite, ID tidak cocok/overflow/pecahan/string, enum asing, properti duplikat, trailing JSON, content type salah/invalid, serta status 201/204/302 ditolak sebagai ORDER_UPSTREAM_ERROR.
+- Read timeout nyata: stub menahan pengiriman headers menggunakan latch, client khusus test memiliki read timeout 200 ms. Skenario normal memakai default 5s dan connect 2s. Koneksi ke port loopback yang sudah ditutup menghasilkan DEPENDENCY_UNAVAILABLE. Transport fault injection HttpConnectTimeoutException menghasilkan ORDER_TIMEOUT; timeout connect OS nyata tidak diuji karena tidak deterministik lintas jaringan.
+- Tidak melakukan I/O database, write Order, lookup repository Order, atau perhitungan ulang total pada adapter HTTP. Regresi transaksi/idempotency tahap sebelumnya tetap lulus.
+
+Perbaikan selama pengujian: default redirect handling membuat respons 302 tanpa Location menjadi kegagalan transport; group orders memakai redirects=dont-follow sehingga 3xx dinilai langsung. Timeout 200 ms pada seluruh class sempat memicu timeout request normal pertama ketika client baru berjalan; override tersebut dipisah khusus test timeout, sedangkan tests respons normal memakai default 5s. Ini perubahan konfigurasi pengujian; default produksi tetap sesuai rancangan 2s/5s.
+
+Batas: tests read timeout menahan headers, bukan seluruh kemungkinan kegagalan streaming body. Integrasi Order sungguhan, DNS/TLS/cluster, batas timeout connect jaringan nyata, full Payment HTTP flow, simulator, generated PaymentApplicationTests dan full Maven verify belum diuji. Pemetaan exception ke HTTP 502/503/504 dilakukan exception handler pada tahap berikutnya; tests ini memeriksa code aplikasi. Lookup tidak membuka transaksi DB; orkestrator tahap 7 tetap bertanggung jawab memisahkan lookup HTTP dari transaksi finalisasi.
+
+File baru: OrderApiClient, OrderClientConfiguration, OrderRestAdapter, dto/OrderResponse, mapper/OrderSnapshotMapper, OrderRestAdapterTest, OrderTransportFailureTest. POM, application.properties serta dokumen plan/design/architecture/testing diperbarui. Kontrak OpenAPI, domain dan migrasi tidak diubah.
+
+## Riwayat tahap 5 persistence adapter
 
 Working tree di atas commit `703c232`, selesai 29 Oktober 2026 pukul 23:38:28 WIB. Command aktual:
 

@@ -2,7 +2,7 @@
 
 Dokumen ini adalah rencana pekerjaan, bukan hasil implementasi.
 
-Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain), tahap 2 (commands, ports, tipe aplikasi), dan tahap 3 (migrasi/JPA entities) selesai dengan 91 tests gabungan lulus: 62 unit dan 29 tests schema/mapping pada PostgreSQL 17.11 terisolasi. Rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 4 (repository) selesai dengan total 103 tests lulus, termasuk 12 tests repository PostgreSQL. Tahap 5 (mapper/persistence adapter) selesai dengan 117 tests gabungan lulus. Tahap 6–10 belum dikerjakan; client Order, use case dan endpoint belum diimplementasikan.
+Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain), tahap 2 (commands, ports, tipe aplikasi), dan tahap 3 (migrasi/JPA entities) selesai dengan 91 tests gabungan lulus: 62 unit dan 29 tests schema/mapping pada PostgreSQL 17.11 terisolasi. Rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 4 (repository) selesai dengan total 103 tests lulus, termasuk 12 tests repository PostgreSQL. Tahap 5 (mapper/persistence adapter) selesai dengan 117 tests gabungan lulus. Tahap 6 (Order REST adapter) selesai dengan 155 tests gabungan lulus. Tahap 7–10 belum dikerjakan; use case dan endpoint belum diimplementasikan.
 
 Acuan urutan: bagian 4 dan 5 pada `.codex/alur-pekerjaan-developer-setiap-service.md`. Acuan perilaku: [decisions.md](decisions.md), khususnya DEC-012 sampai DEC-017, [business-rules.md](business-rules.md), dan [OpenAPI](../specs/openapi.yaml). Alur lama dipertahankan; idempotency dan simulator ditambahkan sesuai keputusan terbaru. Rujukan historis di `.codex` tidak menggantikan kontrak/keputusan terbaru.
 
@@ -201,6 +201,8 @@ satu-satunya perlindungan jika aplikasi memiliki beberapa instance.
 ## Tahap 6 — Order REST adapter
 
 Hasil: `OrderRestAdapter`, DTO remote, mapper snapshot, dan wiring HTTP client.
+
+Status: selesai. OrderApiClient memakai group orders melalui @ImportHttpServices; property clients.order-url diteruskan ke URL group, default timeout connect/read 2s/5s. OrderRestAdapter dan mapper memvalidasi snapshot serta membedakan 404, kegagalan upstream, koneksi dan timeout. Total 155 tests gabungan lulus, termasuk 38 tests HTTP/transport baru; integrasi Order nyata tetap belum diuji. Berikutnya tahap 7 (use cases).
 
 ```text
 Gunakan $http-interface-clients dan $testing-pyramid.
