@@ -1,8 +1,41 @@
-# Hasil verifikasi Payment — tahap 1–8
+# Hasil verifikasi Payment — tahap 1–9
 
 Tanggal: 29–30 Oktober 2026. Mencakup unit tests domain/aplikasi, tests persistence PostgreSQL dan client HTTP terisolasi, belum verifikasi aplikasi Payment lengkap.
 
-## Verifikasi terbaru — tahap 8 boundary HTTP dan simulator
+## Verifikasi terbaru — tahap 9 exception handler
+
+Working tree di atas commit `96c7c55`, 30 Oktober 2026. Tiga file tahap 9 sudah ada sebagai untracked saat pekerjaan dimulai; implementasi tersebut ditinjau, dilengkapi, dan diuji sesuai kontrak. Tidak ada dependency/POM, domain, use case, migrasi, atau OpenAPI yang diubah. Command aktual:
+
+```powershell
+& 'C:\Users\USER\.m2\wrapper\dists\apache-maven-3.9.6-bin\3311e1d4\apache-maven-3.9.6\bin\mvn.cmd' -o '-Dmaven.repo.local=C:/Users/USER/.m2/repository' -pl services/payment-service -am '-Dtest=PaymentErrorHandlingTest,PaymentsHttpBoundaryTest,SimulatorActivationTest' clean test > payment-stage9-http-clean-test.log 2>&1
+exit $LASTEXITCODE
+```
+
+**BUILD SUCCESS, exit 0, 112 tests, 0 failures, 0 errors, 0 skipped**, selesai pukul 00:43:38 +07:00. PaymentErrorHandlingTest 53, PaymentsHttpBoundaryTest 42, SimulatorActivationTest 17. Log clean berada di root repository agar tidak mengunci direktori target pada Windows.
+
+```powershell
+& 'C:\Users\USER\.m2\wrapper\dists\apache-maven-3.9.6-bin\3311e1d4\apache-maven-3.9.6\bin\mvn.cmd' -o '-Dmaven.repo.local=C:/Users/USER/.m2/repository' -pl services/payment-service -am '-Dtest=*Test' test > services/payment-service/target/payment-stage9-test.log 2>&1
+exit $LASTEXITCODE
+```
+
+**BUILD SUCCESS, exit 0, 295 tests, 0 failures, 0 errors, 0 skipped**, selesai pukul 00:45:15 +07:00. Angka ini adalah 242 tests tahap sebelumnya ditambah 53 tests handler, bukan penjumlahan dua run. XML Surefire ada di target/surefire-reports. Environment: Windows, Maven 3.9.6, runtime Java 22.0.2, compile release 17, Boot 4.1.2, Spring Web 7.0.10, Jackson 3.1.7, Testcontainers 2.0.5 dan PostgreSQL 17.11 disposable. Runtime Java 17 belum diuji.
+
+Bukti tahap 9:
+
+- ApiError hanya memuat code/message, tanpa envelope atau daftar detail internal. GlobalExceptionHandler di adapter.exception mengenali 14 code aplikasi dari desain, dengan pesan publik tetap. Payment/Order hilang menjadi 404; Order tidak layak, attempt aktif/sudah SUCCESS, key mismatch/in-progress, lock sibuk, reference terminal dan hasil berlawanan menjadi 409; dependency menjadi 502/503/504 sesuai penyebab aplikasi.
+- Exception domain/command invalid, parse JSON, Bean Validation, header/key dan path invalid menjadi 400 BAD_REQUEST. Tests memeriksa body invalid pada POST/PATCH/simulator dan memastikan tidak memanggil use case. Domain/usecase tetap tidak mengimpor class adapter/HTTP/JPA.
+- MVC slice memakai controller, mapper, konfigurasi JSON/simulator dan advice nyata; use cases menggunakan MockitoBean. Pemetaan aplikasi diuji melalui POST, dan kontrak error yang sama diperiksa pada GET/PATCH/simulator untuk missing/busy/dependency unavailable. Cabang exception domain khusus diuji langsung dari use case mock.
+- Error framework 404/405/406/415, ErrorResponseException dan ResponseStatusException mempertahankan status, termasuk status nonstandar 499 (code HTTP_ERROR). Allow, Retry-After dan WWW-Authenticate dipertahankan. Body ProblemDetail diganti ApiError dengan Content-Type application/json, termasuk bila header awal application/problem+json.
+- Code aplikasi null/tidak dikenal, exception tak terduga, wrapper rollback yang lolos orkestrator dan kegagalan penulisan respons sebelum commit menjadi 500 INTERNAL_SERVER_ERROR. Tests memakai pesan/cause/reason berisi sentinel sensitif dan memeriksa bahwa body tidak memuat sentinel, stack trace atau field detail exception. Log milik catch-all hanya mencatat nama tipe exception.
+- Respons 401 interceptor simulator tetap memakai code/message tanpa token; tests memeriksa penolakan sebelum apply use case. Regresi domain/use case, HTTP client stub serta schema/repository/transaksi PostgreSQL tahap sebelumnya tetap lulus.
+
+Perbaikan selama verifikasi: kompilasi pertama di sandbox gagal mengakses JAR cache HdrHistogram. Eksekusi dengan akses cache di luar sandbox melanjutkan kompilasi dan menemukan pemanggilan setRetryAfter(int) pada test awal yang tidak tersedia di HttpHeaders versi proyek; diganti set(HttpHeaders.RETRY_AFTER, "30"). Percobaan clean dengan log di dalam target gagal karena file log masih terbuka; pemindahan tujuan log ke root repository membuat clean berhasil. Tidak mengubah versi dependency atau menebak kerusakan JAR. Warning startup simulator invalid, lock timeout PostgreSQL, dan log catch-all berasal dari skenario negatif tests yang lulus.
+
+Batas: tests handler adalah MVC slice dengan use cases mock, bukan alur HTTP → use case → database → Order stub dalam satu aplikasi. Regresi PostgreSQL/HTTP client menguji komponen tersebut secara terpisah. Selector `*Test` tidak menjalankan generated PaymentApplicationTests (nama berakhiran Tests); ini bukan full Maven verify. Respons yang sudah committed atau koneksi client terputus tidak dijamin dapat diganti body-nya. Integrasi Order nyata, provider, deployment, runtime Java 17 dan verifikasi aplikasi gabungan tetap belum diuji/tahap 10.
+
+File implementasi: adapter/exception/ApiError.java, adapter/exception/GlobalExceptionHandler.java, dan adapter/inbound/rest/PaymentErrorHandlingTest.java pada source/test Payment. Dokumentasi implementation-plan, technical-design, architecture dan laporan ini diselaraskan berdasarkan hasil aktual.
+
+## Riwayat tahap 8 boundary HTTP dan simulator
 
 Working tree di atas commit `5b2d3aa`, selesai 30 Oktober 2026 pukul 00:21:16 WIB. Command aktual:
 

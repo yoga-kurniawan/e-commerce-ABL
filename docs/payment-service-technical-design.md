@@ -1,6 +1,6 @@
 # Desain teknis Payment Service — tahap 0
 
-Desain awal: tahap 0, 29 Oktober 2026; dilengkapi catatan implementasi tahap 1–8 (pembaruan 30 Oktober 2026). Domain, commands/ports, migrasi, JPA entities, dan repository sudah tersedia. Persistence adapter, Order REST adapter, use cases dan boundary HTTP/encoder/simulator tahap 8 sudah tersedia; handler error serta verifikasi aplikasi gabungan masih tahap berikutnya. Acuan: DEC-012–DEC-018 pada [decisions.md](decisions.md), [alur implementasi](payment-service-implementation-plan.md), [kontrak publik](../specs/openapi.yaml), dan [kontrak simulator](../specs/payment-simulator.openapi.yaml). Hasil verifikasi aktual dicatat pada [payment-service-testing.md](payment-service-testing.md).
+Desain awal: tahap 0, 29 Oktober 2026; dilengkapi catatan implementasi tahap 1–9 (pembaruan 30 Oktober 2026). Domain, commands/ports, migrasi, JPA entities, dan repository sudah tersedia. Persistence adapter, Order REST adapter, use cases, boundary HTTP/encoder/simulator dan handler error sudah tersedia; verifikasi aplikasi gabungan tetap tahap 10. Acuan: DEC-012–DEC-018 pada [decisions.md](decisions.md), [alur implementasi](payment-service-implementation-plan.md), [kontrak publik](../specs/openapi.yaml), dan [kontrak simulator](../specs/payment-simulator.openapi.yaml). Hasil verifikasi aktual dicatat pada [payment-service-testing.md](payment-service-testing.md).
 
 ## 1. Batas dan komponen
 
@@ -158,7 +158,7 @@ Header `X-Simulator-Token` wajib, dibandingkan secara constant-time terhadap sec
 - DevelopmentPaymentResultController memanggil ApplyPaymentResultUseCase. Controller dan PaymentSimulatorConfiguration sama-sama bersyarat profil `(local | test) & !prod` dan flag payment.simulator.enabled=true; default flag false. Route tidak didaftarkan saat tidak diizinkan.
 - Konfigurasi simulator menolak startup jika server.address tidak eksplisit loopback atau token kurang dari 32 code points/blank. Secret dibaca dari payment.simulator.token atau PAYMENT_SIMULATOR_TOKEN; tidak disimpan dalam application.properties. Auth interceptor hanya dipasang saat aktif dan berjalan sebelum body binding; header hilang/salah/duplikat mendapat 401 dengan code/message. Perbandingan MessageDigest.isEqual dilakukan pada digest SHA-256 berukuran tetap tanpa trim.
 - Tests slice menggunakan MockMvc, use cases @MockitoBean dan encoder/mapper/JSON config nyata. Matrix startup memakai web application context dan memeriksa 404 route saat tidak terdaftar. Ini membuktikan validasi konfigurasi listener; pengujian socket/listener dan alur seluruh aplikasi tetap bagian verifikasi gabungan.
-- Error DTO/parse/header pada tahap ini memakai resolver framework. Pemetaan seluruh error bisnis/dependency dan bentuk body error konsisten menunggu GlobalExceptionHandler tahap 9; respons 401 interceptor sudah memakai code/message. Simulator tidak melakukan transaksi finansial atau write Order.
+- Error DTO/parse/header dan bisnis/dependency kini diterjemahkan oleh GlobalExceptionHandler tahap 9; respons 401 interceptor tetap memakai code/message. Simulator tidak melakukan transaksi finansial atau write Order.
 
 ## 7. Pemetaan error
 
@@ -181,6 +181,13 @@ Header `X-Simulator-Token` wajib, dibandingkan secara constant-time terhadap sec
 
 Simbol exception transport/SQL dipetakan adapter; core memakai exception aplikasi/domain. Timeout connect dibedakan dari kegagalan koneksi langsung. Respons sementara tidak menjadi snapshot replay. Stub mencakup semua cabang. Status 502/503/504 tidak membuktikan Payment terminal FAILED.
 
+### Handler error tahap 9
+
+- ApiError dan GlobalExceptionHandler berada di adapter.exception. Handler memakai daftar code aplikasi yang dikenali dan pesan publik tetap; tidak meneruskan message/cause exception, body request, stack trace, atau token ke body publik. Code null/tidak dikenal menjadi INTERNAL_SERVER_ERROR 500.
+- Exception invariant/command menjadi BAD_REQUEST 400; exception OrderNotPayable, PaymentNotModifiable dan PaymentResultConflict memiliki mapping 409 khusus. Tidak menambahkan dependency HTTP/adapter pada exception domain/usecase.
+- ResponseEntityExceptionHandler menangani parse/validation/header/path/media type/route dan ErrorResponseException/ResponseStatusException. Override handleExceptionInternal mengganti body menjadi ApiError dan Content-Type application/json, sambil mempertahankan status/header framework, termasuk Allow, Retry-After dan WWW-Authenticate. Status HTTP nonstandar tetap dipertahankan dengan code HTTP_ERROR.
+- MVC slice memakai controller, mapper, konfigurasi JSON dan handler nyata dengan use cases MockitoBean. Tests memeriksa status/body aktual pada POST/GET/PATCH/simulator, error input, konflik, dependency, header framework dan tidak munculnya detail sensitif. Ini belum membuktikan alur HTTP → use case → database → stub Order; tahap 10 tetap diperlukan.
+
 ## 8. Bukti yang wajib pada tahap implementasi
 
 - Dua key sama: satu pemilik; duplikat fail-fast lalu replay; JSON property order berbeda tetap ekuivalen.
@@ -191,4 +198,4 @@ Simbol exception transport/SQL dipetakan adapter; core memakai exception aplikas
 - Mapping JPA/JSON mempertahankan pecahan; tests menegaskan reference dan state terminal serta no-op final identik.
 - Simulator benar-benar tidak ada pada profil/default yang tidak diizinkan, prod override, flag false, dan token invalid; tes startup memeriksa loopback/token.
 
-Verifikasi tahap 0: kontrak publik dan simulator telah lolos validator OpenAPI; ini validasi spesifikasi, bukan bukti runtime. Tahap 1–4 memiliki 103 tests lulus: 62 unit, 29 schema/mapping, dan 12 repository dengan PostgreSQL 17 terisolasi. Tests repository membuktikan query/kontensi lock; tests adapter tahap 5 membuktikan protokol klaim, transaksi lokal dan fencing pada skenario yang dijelaskan dalam laporan. Lihat command, hasil, dan batas aktual pada [hasil tests](payment-service-testing.md). Tahap 5 menambahkan 14 tests adapter dengan total 117 lulus. Tahap 6 menambahkan 38 tests HTTP/transport dengan total 155 lulus. Tahap 7 menambahkan 28 tests unik, total 183 lulus. Tahap 8 menambahkan 59 tests boundary/aktivasi, total 242 lulus. Berikutnya tahap 9 (handler) dan verifikasi gabungan.
+Verifikasi tahap 0: kontrak publik dan simulator telah lolos validator OpenAPI; ini validasi spesifikasi, bukan bukti runtime. Tahap 1–4 memiliki 103 tests lulus: 62 unit, 29 schema/mapping, dan 12 repository dengan PostgreSQL 17 terisolasi. Tests repository membuktikan query/kontensi lock; tests adapter tahap 5 membuktikan protokol klaim, transaksi lokal dan fencing pada skenario yang dijelaskan dalam laporan. Lihat command, hasil, dan batas aktual pada [hasil tests](payment-service-testing.md). Tahap 5 menambahkan 14 tests adapter dengan total 117 lulus. Tahap 6 menambahkan 38 tests HTTP/transport dengan total 155 lulus. Tahap 7 menambahkan 28 tests unik, total 183 lulus. Tahap 8 menambahkan 59 tests boundary/aktivasi, total 242 lulus. Tahap 9 menambahkan 53 tests handler, total 295 lulus. Verifikasi aplikasi gabungan tetap tahap 10.

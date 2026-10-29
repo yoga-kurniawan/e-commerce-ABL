@@ -2,7 +2,7 @@
 
 Dokumen ini adalah rencana pekerjaan, bukan hasil implementasi.
 
-Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain), tahap 2 (commands, ports, tipe aplikasi), dan tahap 3 (migrasi/JPA entities) selesai dengan 91 tests gabungan lulus: 62 unit dan 29 tests schema/mapping pada PostgreSQL 17.11 terisolasi. Rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 4 (repository) selesai dengan total 103 tests lulus, termasuk 12 tests repository PostgreSQL. Tahap 5 (mapper/persistence adapter) selesai dengan 117 tests gabungan lulus. Tahap 6 (Order REST adapter) selesai dengan 155 tests gabungan lulus. Tahap 7 (use cases) selesai dengan 183 tests gabungan lulus. Tahap 8 (HTTP/encoder/simulator) selesai dengan 242 tests gabungan lulus. Tahap 9–10 belum dikerjakan; handler error dan verifikasi aplikasi gabungan belum selesai.
+Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain), tahap 2 (commands, ports, tipe aplikasi), dan tahap 3 (migrasi/JPA entities) selesai dengan 91 tests gabungan lulus: 62 unit dan 29 tests schema/mapping pada PostgreSQL 17.11 terisolasi. Rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 4 (repository) selesai dengan total 103 tests lulus, termasuk 12 tests repository PostgreSQL. Tahap 5 (mapper/persistence adapter) selesai dengan 117 tests gabungan lulus. Tahap 6 (Order REST adapter) selesai dengan 155 tests gabungan lulus. Tahap 7 (use cases) selesai dengan 183 tests gabungan lulus. Tahap 8 (HTTP/encoder/simulator) selesai dengan 242 tests gabungan lulus. Tahap 9 (exception handler) selesai dengan 295 tests gabungan lulus, termasuk 53 tests handler. Verifikasi aplikasi gabungan tahap 10 belum dikerjakan.
 
 Acuan urutan: bagian 4 dan 5 pada `.codex/alur-pekerjaan-developer-setiap-service.md`. Acuan perilaku: [decisions.md](decisions.md), khususnya DEC-012 sampai DEC-017, [business-rules.md](business-rules.md), dan [OpenAPI](../specs/openapi.yaml). Alur lama dipertahankan; idempotency dan simulator ditambahkan sesuai keputusan terbaru. Rujukan historis di `.codex` tidak menggantikan kontrak/keputusan terbaru.
 
@@ -254,7 +254,7 @@ final identik tidak memicu efek tambahan.
 
 Hasil: boundary HTTP bisnis dan endpoint simulator khusus development/test.
 
-Status: selesai, 30 Oktober 2026. DTO/mapper, PaymentsApi/Controller, encoder snapshot JSON produksi, strict JSON configuration dan simulator bersyarat tersedia. Sebanyak 242 tests gabungan lulus, termasuk 59 tests MVC/aktivasi baru. Default simulator off; profil local/test + flag aktif + binding loopback + token minimal 32 karakter diperlukan, prod menonaktifkan. Handler/body error bisnis lengkap dan verifikasi HTTP+DB+Order stub gabungan tetap tahap 9–10.
+Status: selesai, 30 Oktober 2026. DTO/mapper, PaymentsApi/Controller, encoder snapshot JSON produksi, strict JSON configuration dan simulator bersyarat tersedia. Sebanyak 242 tests gabungan lulus, termasuk 59 tests MVC/aktivasi baru. Default simulator off; profil local/test + flag aktif + binding loopback + token minimal 32 karakter diperlukan, prod menonaktifkan. Handler/body error kemudian diselesaikan pada tahap 9; verifikasi HTTP+DB+Order stub gabungan tetap tahap 10.
 
 ```text
 Gunakan $hexagonal-architecture dan $testing-pyramid.
@@ -280,6 +280,8 @@ dilengkapi setelah handler pada tahap 9; laporkan batas sementara ini.
 ## Tahap 9 — Exception handler
 
 Hasil: respons error bisnis/framework yang konsisten dengan kontrak.
+
+Status: selesai, 30 Oktober 2026. ApiError dan GlobalExceptionHandler berada di adapter.exception. Mapping error input/domain/aplikasi/dependency mengikuti desain tahap 0; error framework mempertahankan status/header dan memakai body `{code,message}`. Pesan publik tetap, code tidak dikenal/null menjadi 500 tanpa detail internal. Clean build lulus 112 tests HTTP/aktivasi, termasuk 53 tests handler; regresi selector `*Test` lulus 295 tests tanpa failure/error/skipped. Verifikasi aplikasi gabungan tetap tahap 10; rincian dan command ada pada payment-service-testing.md.
 
 ```text
 Gunakan $hexagonal-architecture dan $testing-pyramid.

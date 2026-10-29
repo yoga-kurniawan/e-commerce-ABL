@@ -356,7 +356,9 @@ Repository item terpisah bersifat opsional bila aggregate parent sudah mencukupi
 
 ## Transaksi dan konsistensi
 
-Tahap 8 menambahkan inbound REST DTO/mapper/controller Payment dan encoder snapshot JSON produksi. Respons create/replay dikirim dari body tersimpan; GET/PATCH memakai DTO publik. Simulator development memiliki controller terpisah, profil/flag bersyarat, validasi binding loopback/token saat startup dan auth interceptor sebelum binding request. Handler error lengkap tetap tahap 9; simulator tidak mengubah Order atau memindahkan uang.
+Tahap 9 menyediakan ApiError dan GlobalExceptionHandler di adapter.exception. Exception domain/aplikasi diterjemahkan menjadi status dan `{code,message}` sesuai kontrak; error input, konflik attempt/idempotency/simulator, serta dependency 502/503/504 memakai pesan publik tetap. Error framework mempertahankan status/header seperti Allow, Retry-After dan WWW-Authenticate, dengan body JSON seragam. Code aplikasi yang tidak dikenal dan exception tak terduga menjadi 500 tanpa detail internal. Domain/usecase tidak bergantung pada exception adapter. Bukti MVC slice dan regresi dicatat pada payment-service-testing.md; verifikasi aplikasi gabungan tetap tahap 10.
+
+Tahap 8 menambahkan inbound REST DTO/mapper/controller Payment dan encoder snapshot JSON produksi. Respons create/replay dikirim dari body tersimpan; GET/PATCH memakai DTO publik. Simulator development memiliki controller terpisah, profil/flag bersyarat, validasi binding loopback/token saat startup dan auth interceptor sebelum binding request. Simulator tidak mengubah Order atau memindahkan uang.
 
 Tahap 7 menyediakan Create/Get/Patch/ApplyPaymentResultUseCase di usecase.service. Orkestrator memakai domain dan output ports, tanpa transaksi SQL menyeluruh. Replay diperiksa sebelum lookup Order; kegagalan finalisasi direkonsiliasi lewat inspect bila outcome belum pasti. Adapter menandai rollback terkonfirmasi berdasarkan transaction completion, sehingga klaim hanya dilepas saat aman. PATCH/hasil memakai operasi atomic PaymentStore, dengan invariant/no-op tetap pada domain dan adapter.
 
