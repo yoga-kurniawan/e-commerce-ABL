@@ -1,185 +1,140 @@
-# Panduan development lokal
+# Development lokal
 
 [Kembali ke README](../README.md) · [Arsitektur](architecture.md) · [Pengujian](testing.md)
 
-## 1. Ruang lingkup
+## 1. Lingkup
 
-Panduan ini untuk developer yang sudah membuat skeleton Initializr, parent Maven, dan struktur package APS V3 pada `~/ABL-Project`. Cluster Kubernetes ditunda. Contoh database lokal berikut adalah pilihan pengembangan, bukan perintah yang dinyatakan sudah dijalankan.
+Setup ini menjalankan empat PostgreSQL lewat Docker Compose. Aplikasi Spring Boot dijalankan langsung pada host Ubuntu/WSL, masing-masing dalam terminal terpisah. Kubernetes dan Istio belum diperlukan.
 
-Laporan menjelaskan fungsi/API; Java 17, Spring Boot 4.1.2, Maven, PostgreSQL, dan organisasi adapter adalah baseline teknis dari diskusi project.
+File yang tersedia:
 
-## 2. Pemeriksaan awal
+- `compose.local.yaml`: empat database, port loopback, healthcheck, dan persistent volume.
+- `.env.example`: contoh konfigurasi tanpa password nyata.
+- `scripts/run-local-service.sh`: membaca `.env` dan meneruskan konfigurasi ke Spring Boot tanpa mengubah kode service.
 
-Jalankan dari root project Linux:
+## 2. Buat konfigurasi pribadi
 
-```bash
-cd ~/ABL-Project
-java -version
-./mvnw -version
-./mvnw validate
-```
-
-Periksa Java yang digunakan Maven, bukan hanya hasil `java -version`. Baseline source/runtime project adalah Java 17. Parent root mengunci Spring Boot 4.1.2; empat child mewarisi konfigurasi parent dengan relativePath `../../pom.xml`.
-
-Command generator memakai ID yang ditawarkan Initializr, tetapi versi dependency Maven mengikuti koordinat artifact. Parent root project ini memakai `4.1.2`, bukan menyalin ID API `.RELEASE` secara otomatis.
-
-Untuk mengompilasi Product beserta parent:
+Dari root repository Ubuntu/WSL:
 
 ```bash
-./mvnw -pl services/product-service -am compile
+cp -n .env.example .env
+nano .env
 ```
 
-Compile tidak memulai Spring context/database dan tidak menjalankan test suite. Build pertama dapat mengunduh dependency Maven.
+Isi keempat `*_DB_PASSWORD` dengan password lokal berbeda. Contoh bentuk pengisian: `PRODUCT_DB_PASSWORD='password-lokal-pilihanmu'`. Jangan menggunakan contoh tersebut sebagai password bersama tim.
 
-## 3. Konfigurasi lokal yang direncanakan
+Gunakan format `KEY=value` yang kompatibel Bash. Single quote melindungi spasi, `$`, `#`, dan `!`; hindari karakter single quote di dalam password untuk menjaga kompatibilitas parser Compose dan Bash. `.env` hanya milik developer dan diabaikan Git; `.env.example` tetap dikomit. Helper menjalankan `source .env`, sehingga isi file harus dipercaya dan tidak diambil dari pihak lain tanpa ditinjau.
 
-| Service | Port HTTP host | Database | Username lokal contoh | Port DB host |
+| Service | Port aplikasi host | Database | User | Port DB host |
 |---|---:|---|---|---:|
 | Product | 8081 | product_db | product_user | 5433 |
 | Cart | 8082 | cart_db | cart_user | 5434 |
 | Order | 8083 | order_db | order_user | 5435 |
 | Payment | 8084 | payment_db | payment_user | 5436 |
 
-Ini konfigurasi pengembangan dengan empat instance PostgreSQL terpisah. Port dalam container PostgreSQL tetap 5432. Tiap service hanya memiliki akses database miliknya; gunakan password berbeda per instance. Kredensial nyata tidak disimpan di Git.
+Nilai dapat disesuaikan di `.env`. Port DB dalam container tetap 5432. Image database memakai keluarga PostgreSQL 17; pin digest setelah tim menguji image yang dipilih.
 
-## 4. Contoh menyiapkan database Product
-
-Pastikan Docker aktif dan periksa apakah container sudah pernah dibuat:
+## 3. Validasi dan jalankan database
 
 ```bash
 docker info
-docker ps -a --filter name=abl-product-db
+docker compose --env-file .env -f compose.local.yaml config --quiet
+docker compose --env-file .env -f compose.local.yaml up -d --wait
+docker compose --env-file .env -f compose.local.yaml ps
 ```
 
-Jika container belum ada, contoh berikut membuat database Product dengan persistent volume. Password dimasukkan secara interaktif:
+Password kosong akan ditolak oleh interpolasi Compose. `--wait` menunggu healthcheck; jika gagal, baca `ps` dan log layanan terkait. Jangan membagikan keluaran `config` tanpa `--quiet` karena dapat memuat password hasil interpolasi.
+
+Contoh diagnosis:
 
 ```bash
-read -r -s -p 'Password PostgreSQL Product lokal: ' PRODUCT_DB_PASSWORD
-printf '\n'
-export PRODUCT_DB_PASSWORD
-
-docker run --detach \
-  --name abl-product-db \
-  --publish 127.0.0.1:5433:5432 \
-  --volume abl-product-data:/var/lib/postgresql/data \
-  --env POSTGRES_DB=product_db \
-  --env POSTGRES_USER=product_user \
-  --env POSTGRES_PASSWORD="$PRODUCT_DB_PASSWORD" \
-  postgres:17
+docker compose --env-file .env -f compose.local.yaml logs --tail=50 product-db
 ```
 
-Jika container sudah ada dan berhenti, jalankan container yang sama dengan `docker start abl-product-db`; jangan membuat ulang atau menghapus volumenya hanya karena name conflict.
+Compose membaca `.env`; Spring Boot sendiri tidak otomatis membacanya. Helper pada bagian 5 menyediakan penghubung untuk aplikasi host. Environment yang sudah diekspor di terminal dapat mengalahkan nilai Compose; gunakan terminal bersih bila hasil konfigurasi tidak sesuai `.env`.
 
-Periksa kesiapan:
+## 4. Periksa database
 
 ```bash
-docker logs --tail 30 abl-product-db
-docker exec abl-product-db pg_isready -U product_user -d product_db
+docker compose --env-file .env -f compose.local.yaml exec product-db \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
-`pg_isready` memeriksa kesiapan server; keberhasilan startup aplikasi dan query tetap diperlukan untuk memastikan koneksi/kredensial benar. Pola yang sama dapat digunakan untuk tiga database lain dengan mengganti nama, port, volume, database, user, dan password.
+Di dalam psql:
 
-Mengganti environment password pada container yang memakai data lama tidak otomatis mengubah password role di database yang sudah diinisialisasi. Jangan menghapus volume berisi data untuk menyelesaikan masalah kredensial tanpa meninjau penyebabnya.
-
-## 5. Menjalankan service dengan environment Spring Boot
-
-Initializr menghasilkan `application.properties` pada project pengguna. File tersebut boleh dipertahankan. Contoh berikut menggunakan nama environment standar Spring Boot agar tidak bergantung pada placeholder custom yang belum ditulis.
-
-Terminal Product, setelah database dan migrasi yang diperlukan tersedia:
-
-```bash
-export SERVER_PORT=8081
-export SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5433/product_db'
-export SPRING_DATASOURCE_USERNAME='product_user'
-export SPRING_DATASOURCE_PASSWORD="$PRODUCT_DB_PASSWORD"
-export SPRING_JPA_HIBERNATE_DDL_AUTO=validate
-export SPRING_JPA_OPEN_IN_VIEW=false
-export SPRING_FLYWAY_ENABLED=true
-
-./mvnw -pl services/product-service spring-boot:run
+```sql
+SELECT current_database(), current_user;
 ```
-
-`PRODUCT_DB_PASSWORD` pada contoh harus sudah berisi password yang benar pada terminal tersebut. Jika menggunakan terminal baru, masukkan kembali nilainya secara aman. Environment yang diekspor pada satu terminal tidak otomatis tersedia pada terminal lain.
-
-Untuk Cart/Order/Payment, gunakan terminal terpisah dan ganti port serta JDBC/kredensial sesuai tabel. Jangan menjalankan empat JVM di host dengan port sama.
-
-Jika memilih placeholder custom seperti `DB_URL`, tulis pemetaannya pada konfigurasi terlebih dahulu, misalnya `spring.datasource.url=${DB_URL}`. Mengekspor `DB_URL` saja tidak otomatis mengisi property datasource pada skeleton Initializr yang belum memiliki pemetaan itu.
-
-File `.env`/`.env.example` juga tidak dibaca otomatis oleh Spring Boot. Gunakan environment terminal, run configuration IDE, atau mekanisme pemuatan yang dipilih secara eksplisit.
-
-## 6. URL dependency dan HTTP client
-
-Untuk rancangan client APS V3, tetapkan property yang dibaca konfigurasi HTTP. Contoh dalam `application.properties` consumer:
-
-```properties
-clients.product-url=${PRODUCT_SERVICE_URL:http://localhost:8081}
-clients.cart-url=${CART_SERVICE_URL:http://localhost:8082}
-clients.order-url=${ORDER_SERVICE_URL:http://localhost:8083}
-```
-
-| Consumer | Dependency pada rancangan |
-|---|---|
-| Cart | Product |
-| Order | Cart; Product untuk snapshot/validasi yang dibutuhkan |
-| Payment | Order |
-
-Adapter REST mengimplementasikan port lookup; use case tidak memanggil RestClient secara langsung. Tambahkan `spring-boot-starter-restclient` pada consumer bila memakai auto-configured RestClient.Builder. Gunakan timeout dan bedakan resource 404 dari koneksi/timeout/5xx.
-
-Saat nanti berjalan dalam Kubernetes, ganti URL melalui environment menjadi alamat Kubernetes Service. `localhost` dalam Pod bukan alamat service lain.
-
-## 7. Migrasi dan mapping
-
-Lokasi migrasi setiap module:
 
 ```text
-services/<service>-service/src/main/resources/db/migration/
+\dt
+\q
 ```
 
-- Jika belum ada migrasi, mulailah dari `V1__...sql`.
-- Jika V1 sudah diterapkan, tambahkan V2 dan seterusnya. Skeleton yang dibuat sendiri tidak otomatis memiliki migrasi bootstrap starter lain.
-- Flyway mengelola skema; Hibernate `ddl-auto=validate` memeriksa entity JPA terhadap skema.
-- Tulis domain dan JPA entity terpisah sesuai APS V3. Domain tidak memakai annotation JPA.
-- Gunakan nama tabel `orders` untuk Order. Foreign key hanya antarentity lokal pada database layanan yang sama.
-- Tentukan tipe SQL, precision, version/locking, cascade, dan retention berdasarkan keputusan desain. Laporan belum menentukan semua detail tersebut.
+Ganti `product-db` dengan `cart-db`, `order-db`, atau `payment-db`. Healthcheck membuktikan server siap menerima koneksi, bukan kelulusan autentikasi aplikasi atau migrasi bisnis. Tabel bisnis belum muncul sebelum migrasinya ditulis dan dijalankan.
 
-Tidak memakai `ddl-auto=update` sebagai pengganti migrasi yang dapat ditelusuri. Validation berhasil pada skeleton tanpa entity bisnis belum membuktikan mapping bisnis sudah benar.
+## 5. Jalankan service
 
-## 8. Urutan pengerjaan
-
-1. Tinjau kontrak dan [keputusan terbuka](decisions.md).
-2. Tulis domain dan invariant, command, serta output port.
-3. Tulis migrasi, JPA entity, repository, mapper, dan persistence adapter.
-4. Implementasikan koordinator use case dan alternatifnya.
-5. Implementasikan REST adapter dependency bila diperlukan.
-6. Tulis DTO, mapper HTTP, controller/API, dan error handler.
-7. Jalankan tests komponen serta HTTP; catat hasil aktual.
-
-Mulai dari Product, lalu Cart, Order, dan Payment. Consumer dapat diuji dengan mock/stub port saat dependency belum selesai; ini tidak menggantikan pengujian integrasi aktual.
-
-## 9. Memeriksa HTTP
-
-Jika Actuator terpasang dan aplikasi berhasil start, contoh pemeriksaan proses Product:
+Periksa Java dan Maven:
 
 ```bash
-curl --fail --silent --show-error http://localhost:8081/actuator/health
+java -version
+bash mvnw -version
+bash mvnw validate
 ```
 
-Endpoint bisnis baru diperiksa setelah controller terkait dibuat:
+Jalankan satu command berikut pada tiap terminal, dari root repository yang sama:
 
 ```bash
-curl -i http://localhost:8081/api/v1/products
+bash scripts/run-local-service.sh product
 ```
 
-Port 8080 pada OpenAPI adalah contoh pintu masuk publik. Tanpa gateway lokal, panggil port service masing-masing. Jangan memanggil 8080 lalu menyimpulkan service 8081 gagal hanya karena belum ada proses ingress/gateway.
+```bash
+bash scripts/run-local-service.sh cart
+```
 
-## 10. Tests, Git, dan dokumentasi
+```bash
+bash scripts/run-local-service.sh order
+```
 
-Jalankan `./mvnw verify` setelah konfigurasi tests siap. Generated context test Initializr dapat gagal bila datasource belum tersedia. Gunakan strategi tests pada [testing](testing.md), tanpa menganggap skip tests sebagai bukti keberhasilan fitur.
+```bash
+bash scripts/run-local-service.sh payment
+```
 
-`.gitignore` mengecualikan build output dan konfigurasi lokal, tetapi tidak menghapus file yang sudah terlanjur tracked. Pertahankan Maven Wrapper dalam repository. Saat menambah aturan atau endpoint, update OpenAPI dan dokumentasi yang terkait serta catat keputusan pada [decisions](decisions.md).
+Helper mengatur `SERVER_PORT`, datasource standar Spring Boot, `ddl-auto=validate`, Flyway, serta property `clients.product-url`, `clients.cart-url`, dan `clients.order-url` melalui `SPRING_APPLICATION_JSON`. Bean REST client tetap perlu diimplementasikan untuk memakai property tersebut. Helper menimpa `SPRING_APPLICATION_JSON` untuk proses aplikasi yang dijalankannya; gunakan run configuration sendiri bila membutuhkan konfigurasi JSON tambahan.
 
-## 11. Tahap berikutnya
+Tidak ada controller bisnis atau entity yang otomatis dibuat oleh helper. Endpoint bisnis dapat tetap 404 sampai diimplementasikan. Startup juga dapat gagal jika migrasi/entity yang ditulis tidak sesuai skema; baca penyebab pada log.
 
-Dockerfile, image tags, manifests database, Helm chart, dan konfigurasi Istio dikerjakan saat memasuki deployment. Folder `deploy/`, `scripts/`, dan `tests/` root adalah tempat hasil pekerjaan tersebut; dokumen ini tidak mengklaim file deployment atau script sudah tersedia.
+## 6. Persistent storage dan kredensial
 
-Pengembangan domain/unit test tidak mensyaratkan cluster aktif. Pengujian repository dan startup aplikasi tetap membutuhkan database atau konfigurasi test yang sesuai.
+Empat named volume terpisah menyimpan data. Compose memberi prefix nama berdasarkan `COMPOSE_PROJECT_NAME`; pertahankan nilainya agar memakai data yang sama. Tidak ada fixed container name, sehingga pengelolaan dilakukan memakai nama service Compose.
+
+Mengganti password/user/database pada `.env` setelah volume terinisialisasi tidak otomatis memigrasikan role atau data lama. Perubahan kredensial memerlukan perubahan database yang sesuai. Jangan menghapus volume untuk mengatasi error tanpa memastikan datanya boleh dibuang.
+
+Database hanya dipublish ke `127.0.0.1` pada port host yang ditetapkan. Ini setup lokal, bukan rancangan PostgreSQL high availability atau akses produksi.
+
+## 7. Migrasi dan tests
+
+Lokasi migrasi: `services/<service>-service/src/main/resources/db/migration/`.
+
+- Jika belum ada migrasi, mulai dari V1; jika versi sebelumnya sudah diterapkan, tambahkan versi berikutnya.
+- Flyway mengelola perubahan skema; Hibernate validate memeriksa mapping JPA.
+- Domain bisnis berbeda dari JPA entity; relasi/FK hanya dalam database layanan yang sama.
+- Source service, migrasi, dan test belum otomatis dilengkapi oleh setup database ini.
+- Generated context test memerlukan konfigurasi datasource pengujian. Jangan menjalankan tests terhadap database development berisi data penting tanpa mengatur isolasi fixture/profile.
+
+Pengembangan domain/unit test tidak membutuhkan cluster. Lihat [testing.md](testing.md) untuk rencana tests dan [decisions.md](decisions.md) untuk aturan bisnis yang belum ditentukan.
+
+## 8. Menghentikan database
+
+```bash
+docker compose --env-file .env -f compose.local.yaml stop
+```
+
+Untuk menghapus container/network sambil mempertahankan named volume:
+
+```bash
+docker compose --env-file .env -f compose.local.yaml down
+```
+
+Panduan rutin tidak memakai opsi penghapusan volume. Jalankan kembali dengan `up -d --wait` untuk memakai data yang sama.

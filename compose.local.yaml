@@ -1,0 +1,75 @@
+# Local databases only. Spring Boot applications run on the host.
+services:
+  product-db:
+    image: ${POSTGRES_IMAGE:-postgres:17}
+    environment:
+      POSTGRES_DB: ${PRODUCT_DB_NAME:-product_db}
+      POSTGRES_USER: ${PRODUCT_DB_USER:-product_user}
+      POSTGRES_PASSWORD: ${PRODUCT_DB_PASSWORD:?Set PRODUCT_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${PRODUCT_DB_PORT:-5433}:5432"
+    volumes:
+      - product-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+  cart-db:
+    image: ${POSTGRES_IMAGE:-postgres:17}
+    environment:
+      POSTGRES_DB: ${CART_DB_NAME:-cart_db}
+      POSTGRES_USER: ${CART_DB_USER:-cart_user}
+      POSTGRES_PASSWORD: ${CART_DB_PASSWORD:?Set CART_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${CART_DB_PORT:-5434}:5432"
+    volumes:
+      - cart-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+  order-db:
+    image: ${POSTGRES_IMAGE:-postgres:17}
+    environment:
+      POSTGRES_DB: ${ORDER_DB_NAME:-order_db}
+      POSTGRES_USER: ${ORDER_DB_USER:-order_user}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${ORDER_DB_PORT:-5435}:5432"
+    volumes:
+      - order-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+  payment-db:
+    image: ${POSTGRES_IMAGE:-postgres:17}
+    environment:
+      POSTGRES_DB: ${PAYMENT_DB_NAME:-payment_db}
+      POSTGRES_USER: ${PAYMENT_DB_USER:-payment_user}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?Set PAYMENT_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${PAYMENT_DB_PORT:-5436}:5432"
+    volumes:
+      - payment-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+volumes:
+  product-data:
+  cart-data:
+  order-data:
+  payment-data:
