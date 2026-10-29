@@ -97,11 +97,24 @@ Semua path memiliki prefix `/api/v1`. Setiap baris adalah target pengujian setel
 
 ### Payment
 
+- Tahap 0: [desain teknis](payment-service-technical-design.md) menetapkan key ASCII 1–128 case-sensitive, canonicalization berbasis nilai, klaim lease/fencing, lock budget, dan recovery. Tests implementasi wajib menguji takeover stale claim, pemilik lama ditolak, partial index/guard dengan key berbeda, commit ambigu, dan cleanup tanpa menghapus PROCESSING.
+- Simulator mengikuti specs/payment-simulator.openapi.yaml: profil local/test + flag wajib, profil prod menonaktifkan, startup memeriksa loopback/token, token hilang/salah 401, disabled 404, dan hasil final bertentangan 409. Seluruhnya masih rencana tests.
 - Order tidak ditemukan menghasilkan 404; method di luar enum input ditolak.
 - Pada rancangan amount-from-Order, uji bahwa total yang dipakai berasal dari backend Order.
 - Penulisan transactionReference tidak otomatis mengubah status menjadi SUCCESS.
 - Perubahan metadata saat kondisi transaksi melarang menghasilkan 409.
 - Uji repeated request/attempt berdasarkan policy idempotency yang dipilih; jangan mengklaim aman dari duplikasi jika mekanismenya belum ada.
+- I1-A: POST Payment tanpa header Idempotency-Key menghasilkan 400.
+- I2-A: setelah create berhasil dan status Payment berubah, retry dengan key/payload yang sama mengembalikan status HTTP/body create pertama tanpa resource tambahan; GET Payment mengembalikan state terkini. Uji retensi 24 jam dengan clock terkontrol.
+- Key sama dengan payload berbeda menghasilkan 409 IDEMPOTENCY_KEY_REUSED. Urutan properti/whitespace JSON yang berbeda tidak mengubah makna orderId/method.
+- Error sebelum commit tidak disimpan sebagai replay final dan memungkinkan retry setelah penyebab teratasi. Jika Payment dan hasil idempotency sudah commit tetapi pengiriman respons gagal, retry menghasilkan replay tanpa duplikasi. Gunakan fault injection terkontrol untuk membedakan skenario tersebut.
+- Amount pecahan seperti 350000.125 tetap sama dari Order hingga domain, PostgreSQL, dan respons HTTP, tanpa pembulatan diam-diam.
+- PATCH Payment menolak null, kosong/whitespace, body kosong, field asing, serta upaya mengubah amount/status. PATCH sukses mengembalikan schema Payment beserta reference yang disimpan.
+- Concurrency tolak sementara: saat operasi pertama ditahan pada titik sinkronisasi terkontrol, duplikat key/payload sama menghasilkan 409 REQUEST_IN_PROGRESS tanpa resource tambahan. Setelah create selesai, retry menghasilkan replay respons awal. Payment PENDING yang operasinya sudah selesai tidak menghasilkan REQUEST_IN_PROGRESS hanya karena belum dibayar. Model ini tidak menjamin urutan retry FIFO.
+- DEC-016 memilih simulator untuk automated tests dan demo lokal. Uji hasil SUCCESS/FAILED secara deterministik, amount tetap, reference tidak mengesahkan pembayaran, dan penolakan perubahan reference pada state terminal.
+- Setelah endpoint simulator development dirancang, uji ketersediaannya hanya ketika diaktifkan pada development/test dan ketidaktersediaannya pada environment lain. Catat hasil sebagai simulasi, bukan pembayaran provider nyata.
+- Pada COD, fixture hasil SUCCESS simulator menyatakan uang diterima saat penyerahan barang; create Payment dan pencatatan pengiriman saja tidak cukup. Hasil final identik tidak menghasilkan perubahan/efek tambahan; SUCCESS ke FAILED atau FAILED ke SUCCESS ditolak 409. Detail deduplikasi event dan request bersamaan diuji setelah desain teknis ditetapkan.
+- DEC-017: milestone Payment terisolasi tidak mengubah status atau database Order; gunakan stub Order untuk tests lokal dan verifikasi integrasi nyata ketika Order tersedia.
 
 ### PATCH dan schema yang belum lengkap
 

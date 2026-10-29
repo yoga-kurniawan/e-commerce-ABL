@@ -94,9 +94,11 @@ Rancangan APS V3 mengusulkan snapshot item/harga di Order dan lookup Product unt
 
 | Method | Path | Input utama | Sukses | Error yang dicantumkan |
 |---|---|---|---|---|
-| POST | `/payments` | orderId, method | 201, Payment | 400, 404 Order |
-| GET | `/payments/{paymentId}` | paymentId integer | 200, Payment | 404 |
-| PATCH | `/payments/{paymentId}` | Contoh atribut: transactionReference | 200, contoh Payment diperbarui | 400, 404, 409 |
+| POST | `/payments` | orderId, method; header Idempotency-Key wajib | 201, Payment / replay hasil awal | 400, 404, 409, 500, 502, 503, 504 |
+| GET | `/payments/{paymentId}` | paymentId integer | 200, Payment | 400, 404, 500, 503 |
+| PATCH | `/payments/{paymentId}` | transactionReference | 200, Payment | 400, 404, 409, 500, 503 |
+
+Perluasan teknis tabel di atas mengikuti DEC-018 dan [desain tahap 0](payment-service-technical-design.md), bukan klaim bahwa semua respons telah diimplementasikan. Simulator mempunyai [kontrak development/test terpisah](../specs/payment-simulator.openapi.yaml); 18 operasi publik tetap pada specs/openapi.yaml.
 
 Ketentuan sumber, h. 15–16, 23–24, 27–28, 36–37, 43–44:
 
@@ -108,7 +110,19 @@ Ketentuan sumber, h. 15–16, 23–24, 27–28, 36–37, 43–44:
 - Client tidak boleh bebas menetapkan SUCCESS/FAILED. Status final semestinya berasal dari verifikasi provider atau mekanisme backend yang dipercaya.
 - PUT dan DELETE Payment tidak disediakan pada rancangan awal.
 
-Rancangan project mengusulkan amount diperoleh backend dari total Order. Policy payment attempts, idempotency, callback/verifikasi, refund, serta COD belum lengkap. Menulis transactionReference tidak membuktikan uang diterima; 201 berarti permintaan pembayaran dibuat, bukan transaksi keuangan selesai.
+Keputusan pengguna (DEC-012): amount diperoleh backend dari `Order.total`, yaitu total akhir yang telah memperhitungkan biaya/potongan jika fiturnya tersedia. Payment tidak menghitung ulang ongkir atau menambahkan biaya sendiri. Versi saat ini belum menyediakan perincian biaya tambahan; tanpa biaya/potongan, total sama dengan subtotal item. Status awal Payment adalah `PENDING`, termasuk COD. Representasi uang memakai BigDecimal/NUMERIC tanpa pembulatan diam-diam agar nilai sama dengan total Order.
+
+DEC-013 menetapkan header `Idempotency-Key` wajib pada create Payment (I1-A); header yang tidak dikirim menghasilkan 400. Untuk create yang berhasil, retry dengan key dan payload yang sama mengembalikan status HTTP/body respons create pertama (I2-A), tanpa membuat Payment baru. Respons disimpan 24 jam sejak hasil create tersimpan; retry tidak memperpanjang retensi. Ini bukan batas waktu membayar atau expiry Payment. Setelah retensi dan cleanup, replay tidak dijamin; aturan attempt tetap berlaku dan riwayat Payment tidak dihapus. Status Payment terkini dibaca melalui GET Payment, termasuk untuk refresh dashboard; refresh Order tidak menyinkronkan Payment secara otomatis. Policy konflik payload, error sebelum commit, dan concurrency dicatat di bawah; scope/format key, canonicalization, persistence, serta recovery diselesaikan saat implementasi. Idempotency create Order belum ditetapkan.
+
+DEC-014 menetapkan bahwa create Payment baru hanya untuk Order PENDING. Riwayat boleh memiliki beberapa attempt, tetapi maksimal satu PENDING per Order; setelah FAILED boleh membuat attempt baru jika Order masih layak, sedangkan setelah SUCCESS tidak boleh membuat attempt baru. Idempotent replay operasi yang sama bukan attempt baru. DEC-015 mengizinkan pengisian/koreksi transactionReference hanya selama Payment PENDING; SUCCESS/FAILED menolak perubahan.
+
+Concurrency create dengan key/payload sama mengikuti model tolak sementara: operasi yang berhasil diklaim atomik diproses; duplikat saat operasi berjalan mendapat 409 REQUEST_IN_PROGRESS dan retry sendiri dengan key sama setelah jeda. Setelah create selesai, hasil awal direplay. Ini bukan antrean FIFO dan tidak menjamin urutan retry. Operasi create selesai berbeda dari Payment selesai dibayar; Payment PENDING tetap dapat memiliki respons create yang siap direplay. Key sama dengan payload berbeda ditolak 409 IDEMPOTENCY_KEY_REUSED. Hanya hasil create sukses disimpan untuk replay; error sebelum commit tidak menjadi hasil final, sedangkan commit yang berhasil tetap direplay meskipun pengiriman respons gagal. Detail teknis lock dan pemulihan proses diselesaikan saat implementasi.
+
+PATCH hanya menerima transactionReference dan menolak null, kosong/whitespace, body kosong, serta field asing dengan 400. Reference hanya dapat diubah selama PENDING dan ditampilkan pada respons Payment setelah diisi; respons PATCH sukses memakai schema Payment. Batas panjang dan normalisasi diselesaikan saat implementasi.
+
+DEC-016 menetapkan pilihan 6B-2: simulator backend untuk automated tests dan demo lokal, dengan hasil SUCCESS/FAILED yang deterministik. Endpoint simulator khusus development/test dipisahkan dari PATCH reference dan tidak tersedia pada produksi; route, schema, aktivasi, serta pembatasan aksesnya masih perlu ditetapkan. Pada COD, hasil SUCCESS simulator meniru konfirmasi uang diterima saat penyerahan barang. Simulator tidak membuktikan pembayaran nyata.
+
+Simulator mengizinkan PENDING ke SUCCESS/FAILED. Hasil final yang sama tidak memproses perubahan/efek tambahan; hasil final yang bertentangan ditolak 409. Sesuai DEC-017, milestone Payment terisolasi tidak otomatis mengubah status Order. Integrasi provider/callback nyata, sinkronisasi Order, batas waktu pengerjaan, refund, serta penyelesaian COD nyata menjadi tahap berikutnya. Menulis transactionReference tidak membuktikan uang diterima; 201 berarti permintaan pembayaran dibuat, bukan transaksi keuangan selesai. Pembatalan setelah pembayaran sukses dan pengembalian dana memerlukan workflow tersendiri; SUCCESS tidak diubah menjadi FAILED untuk merepresentasikan refund.
 
 ## 6. Keterbatasan kontrak sumber
 

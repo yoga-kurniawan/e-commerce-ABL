@@ -33,9 +33,9 @@ Penerapan suatu keputusan juga berbeda dari status operasional: memilih PostgreS
 | OPEN-004 | Kapan stok direservasi/dikurangi? | Validasi stok disebut; workflow atomik lintas layanan belum ada | Reservation saat checkout/payment atau workflow lain | Risiko overselling dan compensation tidak terdefinisi |
 | OPEN-005 | Bagaimana menjaga riwayat Product? | Diselesaikan oleh DEC-011 | Soft delete melalui status aktif internal | Data produk tetap tersimpan; lihat keputusan di bawah |
 | OPEN-006 | Status mana yang boleh mengubah alamat? | Laporan h. 35 mencontohkan sebelum diproses | Diterapkan pada DEC-012: hanya PENDING, status lain 409 | Menunggu review tim; transisi status lain belum ditetapkan |
-| OPEN-007 | Bagaimana pembayaran diverifikasi? | Laporan h. 37 mengharuskan sumber backend/provider yang dipercaya | Mock terkontrol untuk praktikum atau integrasi provider | SUCCESS/FAILED belum punya alur sah |
-| OPEN-008 | Apakah satu Order boleh memiliki beberapa Payment attempt? | Belum ada policy attempt | Satu request aktif atau beberapa attempt dengan aturan | Constraint UNIQUE(order_id) dan retry belum dapat dipilih |
-| OPEN-009 | Bagaimana idempotency create Order/Payment? | Belum ada kontrak/penyimpanan idempotency | Key, penyimpanan hasil, dan aturan pengulangan yang disepakati | Retry dapat menggandakan transaksi |
+| OPEN-007 | Bagaimana pembayaran diverifikasi? | Pengguna memilih 6B-2; lihat DEC-016 | Diterima: simulator backend untuk automated tests dan demo lokal | Bentuk endpoint development, pembatasan akses, dan detail pemrosesan hasil perlu ditetapkan sebelum implementasi |
+| OPEN-008 | Apakah satu Order boleh memiliki beberapa Payment attempt? | Diselesaikan pada tingkat policy oleh pilihan 3A; lihat DEC-014 | Diterima: beberapa attempt dalam riwayat, maksimal satu PENDING per Order; setelah SUCCESS tidak membuat attempt baru | Perlu constraint/locking dan tests concurrency; bukan UNIQUE(order_id) untuk seluruh riwayat |
+| OPEN-009 | Bagaimana idempotency create Order/Payment? | Pengguna menerima penggunaan idempotency untuk create Payment; lihat DEC-013 | Payment: prinsip diterima, detail key/replay/concurrency belum diputuskan; Order tetap terbuka | Lengkapi kontrak dan persistence sebelum mengklaim request berulang aman |
 | OPEN-010 | Bagaimana identitas/kepemilikan customer dibuktikan? | Input customerId belum mendefinisikan autentikasi | Fixture lokal atau rancangan auth/otorisasi | ID client tidak dapat dianggap identitas terverifikasi |
 | OPEN-011 | Presisi uang, pembulatan, panjang nama, dan batas ID? | Schema belum mengatur semua detail | BigDecimal/NUMERIC dan aturan skala yang disepakati | DTO, SQL, dan total dapat tidak selaras |
 | OPEN-012 | Apakah snapshot item disimpan pada Order? | Diusulkan APS V3; schema internal belum diberikan laporan | Diterapkan pada DEC-012: `order_items` menyimpan productId, nama, quantity, dan harga satuan Cart | Item bersifat internal; belum diekspos pada respons publik |
@@ -85,9 +85,9 @@ README, business-rules, architecture, testing, dan OpenAPI diperbarui untuk menc
 | ID | Temuan | Perubahan yang dibahas | Status |
 |---|---|---|---|
 | API-001 | shippingAddress hanya terlihat pada contoh/PATCH, belum pada schema Order awal | Tambahkan atribut response bila menjadi kontrak yang diimplementasikan | Diterapkan pada DEC-012 (nullable), menunggu review |
-| API-002 | transactionReference belum pada schema Payment awal | Selaraskan schema respons dengan perilaku PATCH | Belum diputuskan |
-| API-003 | Response 200 tambahan Cart/Order/Payment hanya description pada YAML | Definisikan schema berdasarkan narasi/keputusan final | Belum diputuskan |
-| API-004 | PATCH tidak menetapkan additionalProperties false | Tentukan penolakan field asing dan null semantics | Belum diputuskan; narasi membatasi atribut yang boleh diubah |
+| API-002 | transactionReference belum pada schema Payment awal | Tambahkan atribut respons opsional sesuai DEC-015 | Diterima dan dicatat pada kontrak; implementasi belum ada |
+| API-003 | Response 200 tambahan Cart/Order/Payment hanya description pada YAML | PATCH Payment mengembalikan schema Payment | Payment diselesaikan pada kontrak; Cart/Order masih terbuka |
+| API-004 | PATCH tidak menetapkan additionalProperties false | PATCH Payment menolak field asing, null, dan reference kosong | Payment diselesaikan pada kontrak melalui DEC-015; kebijakan global/layanan lain masih terbuka |
 | API-005 | Beberapa error workflow/dependency belum dicantumkan per operasi | Tambahkan status/body setelah memilih pemetaan error | Belum diputuskan |
 
 Jangan menganggap response tanpa `content` di schema harus tanpa body. Narasi memberi contoh body pada beberapa operasi tambahan. Sebaliknya, DELETE 204 secara eksplisit tidak memiliki body.
@@ -128,6 +128,98 @@ Jangan menganggap response tanpa `content` di schema harus tanpa body. Narasi me
 - Respons Order menambahkan shippingAddress (nullable). Respons PATCH 200 memakai schema Order.
 - Lookup HTTP dilakukan di luar transaksi database; Order dan item disimpan dalam satu transaksi lokal.
 - Belum diputuskan: pengosongan/penguncian Cart setelah checkout, idempotency create Order (OPEN-009), transisi PENDING ke CONFIRMED/CANCELLED, dan optimistic locking.
+
+## DEC-013: Amount dan status awal Payment
+
+- Status: diterima oleh pengguna pada 29 Oktober 2026; belum diimplementasikan atau diuji.
+- Amount Payment berasal dari total akhir yang disediakan backend Order, bukan nominal bebas dari client atau harga katalog terkini.
+- Istilah subtotal berarti jumlah harga item; total akhir berarti subtotal ditambah biaya yang berlaku dan dikurangi potongan jika fitur tersebut tersedia. Order bertanggung jawab menghitung komponen total. Payment mengambil nilai `Order.total` dan tidak menambahkan ongkir/biaya untuk kedua kalinya.
+- Versi kontrak saat ini hanya memiliki `Order.total`; belum ada perincian ongkir atau biaya tambahan. Keputusan ini tidak menambahkan fitur biaya baru atau nominal biaya asumsi. Jika belum ada biaya/potongan, total sama dengan subtotal item.
+- Payment baru selalu berstatus `PENDING`, termasuk method COD. Respons 201 serta pengisian transactionReference bukan bukti pembayaran selesai.
+- Dampak API/domain: input create tetap orderId dan method; backend memperoleh amount melalui OrderLookup. Enum status akhir tetap mengikuti kontrak; sumber hasil simulasi ditetapkan melalui DEC-017.
+- Tests yang diperlukan: create memakai total dari stub/Order, menginisialisasi PENDING, dan tidak menghitung biaya tambahan sendiri; nominal/status dalam input tidak dijadikan sumber nilai bisnis. Policy penolakan field asing mengikuti keputusan kontrak terpisah.
+- Pengguna menerima BigDecimal pada Java dan NUMERIC pada PostgreSQL tanpa pembulatan diam-diam. Simpan amount dengan nilai desimal yang sama seperti total Order; jangan memakai float/double sebagai representasi perhitungan atau menetapkan skala yang memangkas nilai tanpa keputusan baru. Uji pemetaan dan serialisasi dengan nilai pecahan seperti 350000.125.
+- Kelayakan status Order dan payment attempts ditetapkan melalui DEC-015; perubahan reference melalui DEC-016; simulator hasil pembayaran melalui DEC-017. Mata uang, batas nominal, masa berlaku nominal, dan integrasi COD nyata setelah penyerahan barang tetap terbuka di luar baseline awal.
+
+## DEC-014: Idempotency pada create Payment
+
+- Status: prinsip diterima oleh pengguna pada 29 Oktober 2026; dilengkapi pilihan I1-A (header wajib) dan I2-A (replay respons create pertama). Belum diimplementasikan atau diuji.
+- Pengulangan request untuk operasi create Payment yang sama harus dapat dikenali agar retry tidak membuat Payment tambahan.
+- POST `/api/v1/payments` mewajibkan header `Idempotency-Key` yang dibuat client untuk satu operasi; retry operasi yang sama menggunakan key yang sama. Request tanpa header ditolak 400. Format/panjang key, scope, dan detail canonicalization payload ditentukan saat desain teknis; keputusan payload berbeda dan hasil gagal ditetapkan di bawah.
+- Masa retensi respons create yang berhasil dipilih 24 jam sejak hasil create pertama tersimpan, tanpa memperpanjang durasi setiap retry. Pengguna menyerahkan pemilihan durasi berdasarkan praktik nyata; 10 menit–1 jam dinilai terlalu pendek untuk pemulihan request yang tertunda. Ini durasi penyimpanan catatan idempotency, bukan expiry Payment/Order atau batas waktu membayar.
+- Catatan hasil yang sudah selesai dan melewati retensi boleh dibersihkan; catatan operasi yang masih diproses tidak dihapus hanya karena waktu berlalu. Setelah jendela retensi, replay tidak lagi dijamin; jika catatan sudah dibersihkan, key yang digunakan ulang dapat dianggap operasi baru. Client harus membuat key baru untuk operasi bisnis baru, bukan mendaur ulang key lama. Penghapusan catatan tidak menghapus Payment/riwayat attempt, dan policy DEC-015 tetap berlaku.
+- Dasar pemilihan: [Stripe API v1](https://docs.stripe.com/api/idempotent_requests) mengizinkan pembersihan key setelah minimal 24 jam dan menolak perubahan parameter pada key yang sama; [Adyen](https://docs.adyen.com/development-resources/api-idempotency/) mendokumentasikan validitas 7–14 hari. Durasi dan titik awal di atas adalah keputusan proyek, bukan standar universal atau integrasi provider.
+- Pergantian metode setelah Payment FAILED merupakan attempt baru dengan key baru jika Order masih layak. Timeout request saja tidak membuktikan Payment FAILED. Pengguna menerima penolakan 409 Conflict untuk key sama dengan payload berbeda; gunakan code IDEMPOTENCY_KEY_REUSED. Bandingkan makna request orderId/method, bukan urutan properti atau whitespace JSON; detail canonicalization diselesaikan saat implementasi.
+- Untuk operasi create yang berhasil, retry dengan key dan payload yang sama mengembalikan status HTTP dan body respons create pertama, tanpa membuat Payment baru. Jika respons awal berisi Payment 501 berstatus PENDING lalu resource telah berubah menjadi SUCCESS, replay tetap mengembalikan body awal PENDING.
+- Pengguna menerima penyimpanan hanya respons create yang berhasil untuk replay pada versi pertama. Error sebelum perubahan tersimpan tidak menjadi replay final dan dapat dicoba ulang dengan key yang sama setelah penyebabnya diatasi. Payment dan hasil sukses idempotency perlu disimpan secara atomik dalam transaksi lokal. Jika commit sudah berhasil tetapi respons tidak sampai, retry harus menemukan hasil tersimpan. Hasil commit yang belum diketahui harus direkonsiliasi melalui key; jangan menganggap rollback hanya karena koneksi terputus. Detail klaim/recovery dirancang saat implementasi.
+- Status Payment terkini dibaca lewat GET `/api/v1/payments/{paymentId}`. Dashboard dapat menyegarkan data Payment melalui endpoint tersebut; refresh Order saja tidak menjamin status Payment ikut diperbarui. Batas milestone tanpa perubahan status Order otomatis diterima melalui DEC-018.
+- Pemeriksaan idempotency harus mempertimbangkan request bersamaan; pemeriksaan keberadaan data lalu insert tanpa perlindungan atomik belum membuktikan aman dari duplikasi.
+- Pengguna memilih tolak sementara: request pertama yang berhasil mengklaim operasi secara atomik diproses. Duplikat dengan key/payload sama saat operasi masih berjalan mendapat 409 dengan code REQUEST_IN_PROGRESS; client menunggu jeda lalu retry menggunakan key yang sama. Setelah hasil create tersedia, duplikat memperoleh replay I2-A, bukan konflik in-progress.
+- Model ini bukan antrean FIFO ketat: request yang ditolak tidak diantrekan, urutan retry tidak dijamin, dan pemenang ditentukan oleh klaim atomik, bukan timestamp kedatangan jaringan. Pengguna telah mengonfirmasi batas ini. Detail implementasi klaim, lock, dan pemulihan proses yang terputus masih perlu ditetapkan.
+- REQUEST_IN_PROGRESS mengacu pada operasi HTTP create yang belum selesai, bukan status Payment PENDING. Payment dapat tetap PENDING setelah create selesai dan tetap memiliki respons yang dapat direplay. Respons konflik sementara tidak boleh menggantikan hasil create atau disimpan sebagai replay final operasi tersebut.
+- Idempotency berbeda dari policy payment attempts: request memakai key baru dapat mewakili operasi baru dan tetap harus mematuhi aturan jumlah attempt/Payment aktif pada OPEN-008.
+- Dampak: kontrak header wajib, replay, dan konflik sementara dicatat pada OpenAPI; diperlukan penyimpanan identitas request serta status/body hasil create agar replay tidak dibentuk dari state Payment terkini. Detail persistence, batas transaksi lokal, dan perlindungan concurrency belum diputuskan. Jangan menetapkan constraint satu Payment per Order hanya berdasarkan keputusan idempotency.
+- Tests yang diperlukan setelah mekanisme dipilih: pengulangan operasi yang sama tidak menggandakan Payment; request bersamaan terkontrol; perbedaan payload ditangani menurut kontrak; kegagalan tidak meninggalkan Payment dan catatan idempotency yang tidak konsisten.
+- Tests khusus I1-A/I2-A: header hilang menghasilkan 400; create sukses lalu status resource berubah tetap menghasilkan replay status/body awal; GET setelahnya mengembalikan state terkini dan jumlah Payment tetap satu.
+- Tests concurrency tolak sementara: tahan operasi create pertama secara terkontrol, kirim duplikat, periksa 409 REQUEST_IN_PROGRESS tanpa Payment tambahan; setelah operasi pertama selesai, retry mendapat replay 201/body awal. Jangan memakai sleep arbitrer sebagai satu-satunya sinkronisasi test.
+- Tests retensi: replay dalam 24 jam mengikuti I2-A; retry tidak memperpanjang TTL; cleanup hanya catatan hasil selesai yang melewati retensi; Payment tetap tersimpan; request setelah cleanup tetap mengikuti aturan attempt aktif/sudah SUCCESS. Gunakan clock terkontrol untuk menguji waktu tanpa menunggu 24 jam.
+- Keputusan ini tidak otomatis menyelesaikan idempotency create Order atau berarti retry otomatis sudah aman diaktifkan.
+
+## DEC-015: Kelayakan Order dan payment attempts
+
+- Status: diterima oleh pengguna pada 29 Oktober 2026 melalui pilihan 1A dan 3A; belum diimplementasikan atau diuji.
+- Hanya Order berstatus `PENDING` yang boleh dibuatkan Payment baru. Order `CONFIRMED` dan `CANCELLED` tidak memenuhi syarat untuk create Payment baru. Status Order berbeda dari status Payment; aturan perubahan status Order setelah pembayaran belum diputuskan.
+- Satu Order dapat memiliki beberapa Payment attempt dalam riwayat, tetapi maksimal satu attempt berstatus `PENDING` pada satu waktu. Jika masih ada PENDING, operasi create baru ditolak. Setelah attempt FAILED, pengguna dapat membuat attempt baru selama Order tetap memenuhi syarat. Setelah ada SUCCESS, attempt baru ditolak, sekalipun Order masih terlihat PENDING.
+- Idempotent replay untuk operasi create yang sama bukan attempt baru dan harus diperlakukan sesuai DEC-014; mekanisme replay tetap perlu dirinci.
+- Pertimbangan desain: memberi kesempatan mencoba lagi setelah kegagalan terkonfirmasi serta mencegah beberapa permintaan pembayaran aktif untuk satu Order. Policy ini tidak menjamin pembayaran tidak akan gagal.
+- Dampak persistence: jangan memakai UNIQUE(order_id) tanpa kondisi karena akan melarang seluruh riwayat attempt. Pilih perlindungan atomik terhadap request bersamaan dan konflik dengan perubahan status; strategi teknis belum diputuskan.
+- Dampak kontrak: respons konflik untuk attempt aktif/sudah berhasil dan Order tidak layak perlu didokumentasikan pada POST Payment. Status HTTP spesifik masih perlu diselaraskan dengan OpenAPI sebelum implementasi final.
+- Tests yang diperlukan: create untuk Order PENDING; penolakan Order CONFIRMED/CANCELLED; maksimal satu PENDING meskipun key berbeda dan request bersamaan; create baru setelah FAILED; penolakan setelah SUCCESS; replay request lama tidak menambah attempt.
+- Kebutuhan lanjutan yang disebut pengguna: pembatalan jika pesanan tidak dikerjakan dalam batas waktu dan pengembalian dana. Durasi, trigger, state, otorisasi, serta workflow refund belum diputuskan dan belum ditambahkan ke kontrak. Pembayaran yang sudah SUCCESS tidak diubah menjadi FAILED hanya untuk mewakili refund.
+
+## DEC-016: Perubahan transactionReference selama PENDING
+
+- Status: diterima oleh pengguna pada 29 Oktober 2026 melalui pilihan 5A; belum diimplementasikan atau diuji.
+- transactionReference boleh diisi dan diperbaiki selama Payment berstatus PENDING. Payment SUCCESS/FAILED menolak perubahan reference.
+- Perubahan reference tidak mengubah amount atau status Payment dan bukan verifikasi pembayaran.
+- Dampak kontrak: selaraskan schema respons Payment/PATCH dengan transactionReference dan petakan state yang melarang perubahan ke respons konflik sesuai kontrak PATCH.
+- Validasi yang diterima pengguna: PATCH hanya menerima transactionReference; tolak null, string kosong/seluruhnya whitespace, body kosong, dan field asing dengan 400. Field amount/status tidak boleh diubah melalui endpoint ini. Batas panjang, normalisasi reference, dan koordinasi dengan verifikasi bersamaan dirancang saat implementasi.
+- Respons Payment dapat memuat transactionReference setelah diisi; sebelum diisi, atribut opsional ini dapat tidak dikirim. Respons PATCH sukses menggunakan schema Payment yang sama. Kontrak respons diselaraskan tanpa mengizinkan null pada request PATCH.
+- Tests yang diperlukan: pengisian awal dan koreksi saat PENDING; penolakan saat SUCCESS/FAILED; amount dan status tetap; kegagalan update tidak menyimpan perubahan parsial.
+
+## DEC-017: Simulator pembayaran untuk automated tests dan demo lokal
+
+- Status: diterima oleh pengguna pada 29 Oktober 2026 melalui pilihan 6B-2; belum diimplementasikan atau diuji.
+- Keputusan: sediakan simulator backend dengan hasil yang dapat dipilih secara deterministik untuk menjalankan skenario pembayaran SUCCESS dan FAILED dalam automated tests serta demo lokal. Simulator tidak memindahkan uang atau membuktikan transaksi provider nyata.
+- Demo lokal memiliki endpoint khusus development yang terpisah dari PATCH transactionReference. Simulator/endpoint hanya diaktifkan secara eksplisit pada lingkungan development/test dan tidak tersedia pada deployment produksi. Nama profil, flag aktivasi, route, schema input/output, dan pembatasan akses belum diputuskan.
+- Alur yang dituju: POST Payment menghasilkan PENDING; pengisian reference tidak mengubah status; simulator memasok hasil; use case/domain memvalidasi perubahan state dan menyimpannya; GET Payment menampilkan hasil.
+- Rancangan pembagian tanggung jawab: pemicu simulator meneruskan hasil ke pemrosesan hasil pembayaran pada application/domain, bukan mengubah tabel langsung dari controller. Detail port/adapter ditetapkan saat implementasi.
+- Untuk COD, skenario SUCCESS simulator merepresentasikan konfirmasi uang diterima pada penyerahan barang. Membuat Payment COD atau sekadar mencatat pengiriman tidak otomatis membuat SUCCESS. Integrasi penerimaan uang nyata belum termasuk keputusan ini.
+- Policy hasil yang diterima pengguna: PENDING dapat menjadi SUCCESS atau FAILED. Pengiriman ulang hasil final yang sama tidak mengubah data atau memicu efek tambahan. Permintaan mengubah SUCCESS menjadi FAILED atau FAILED menjadi SUCCESS ditolak 409. Setelah FAILED, percobaan bisnis baru membuat Payment baru sesuai DEC-015, bukan menghidupkan kembali Payment lama.
+- Detail event/request hasil simulasi, identitas event/deduplikasi teknis, dan concurrency dengan perubahan reference diselesaikan saat implementasi. Keputusan idempotency create Payment (DEC-014) tidak otomatis menyediakan mekanisme idempotency pemrosesan hasil.
+- Dampak kontrak: dokumentasikan endpoint simulator sebagai kontrak development/test terpisah dari API bisnis publik. Kontrak publik yang ada belum diperluas pada tahap pencatatan ini; jumlah 18 operasi pada 10 path tetap merujuk specs/openapi.yaml saat ini.
+- Tests yang diperlukan: skenario PENDING ke SUCCESS dan PENDING ke FAILED; reference tetap tidak menjadi pemicu status final; amount tidak berubah; state terminal menolak perubahan reference; endpoint simulator tidak tersedia saat dinonaktifkan/di luar environment yang diizinkan; perilaku hasil berulang dan concurrency diuji setelah policy dirinci.
+- Tidak menetapkan integrasi provider, perubahan status Order otomatis, deadline pengerjaan, refund, atau penambahan status pembayaran baru.
+
+## DEC-018: Batas milestone Payment terisolasi
+
+- Status: diterima oleh pengguna pada 29 Oktober 2026 bersama seluruh rekomendasi penyelesaian baseline; belum diimplementasikan atau diuji.
+- Payment tidak otomatis mengubah status Order pada milestone pertama. Simulator mengubah status Payment melalui use case/domain Payment saja; tidak melakukan write langsung ke database Order.
+- Dashboard membaca status Order dan Payment dari sumber masing-masing. Agregasi dashboard serta sinkronisasi status antarlayanan menjadi pekerjaan integrasi berikutnya.
+- Implementasi awal memakai stub Order untuk pengujian terisolasi; integrasi Order nyata diverifikasi ketika layanannya tersedia.
+- Detail teknis nama class/tabel, constraint/index, klaim atomik, recovery proses terputus, route/profil/aktivasi/pembatasan akses simulator, serta fixture dan stub dirancang saat implementasi dan harus dijelaskan serta diuji. Ini bukan persetujuan untuk menambah fitur bisnis di luar baseline.
+- Refund, provider nyata, biaya ongkir baru, deadline pengerjaan, dan deployment Kubernetes tetap tahap berikutnya. Keputusan baseline cukup untuk mulai domain, port, use case, dan tests terkait; detail teknis yang tersisa bukan alasan menunda seluruh implementasi.
+
+## DEC-019: Desain teknis tahap 0 Payment
+
+- Status: rancangan teknis ditetapkan dalam scope tahap 0 yang diminta pengguna; belum diimplementasikan atau diuji runtime. Rincian normatif untuk tahap berikutnya ada pada [payment-service-technical-design.md](payment-service-technical-design.md).
+- Scope key adalah `(CREATE_PAYMENT_V1, key)` per payment_db, dengan nilai case-sensitive 1–128 karakter ASCII sesuai pola pada OpenAPI. Payload dibandingkan berdasarkan orderId Long/method yang tervalidasi, bukan teks JSON mentah; create menolak field asing/properti duplikat. Tidak memperkenalkan autentikasi customer.
+- Klaim PROCESSING memakai lease default 30 detik dan owner token/fencing; COMPLETED memuat snapshot status/body create. Transaksi klaim dan transaksi finalisasi terpisah; lookup Order berlangsung tanpa transaksi SQL. Payment dan hasil replay commit bersama. Lock budget awal 250 ms; nilai konfigurasi belum menjadi SLA terukur.
+- Guard lokal per Order dan partial unique index untuk status PENDING/SUCCESS melindungi policy attempt. Recovery wajib memeriksa token dan state; expired lease tidak boleh mengalahkan transaksi finalisasi yang masih memegang lock. Commit yang belum diketahui direkonsiliasi, bukan dianggap rollback.
+- Money memakai NUMERIC tanpa fixed scale dan BigDecimal; reference dipertahankan persis tanpa trim atau batas panjang bisnis baru. Payment memakai version Long dan ID sequence numerik. Detail skema dan port ada pada desain, bukan migrasi/class yang telah dibuat.
+- Kontrak publik Payment dilengkapi 400/404/409/500/502/503/504 sesuai operasi. Simulator memakai kontrak terpisah `specs/payment-simulator.openapi.yaml`, POST `/internal/dev/payments/{paymentId}/result`, hasil SUCCESS/FAILED, dan 200 Payment/no-op terminal identik.
+- Simulator membutuhkan profil local/test, flag enable eksplisit, listener loopback, serta secret environment dengan header X-Simulator-Token. Profil prod menonaktifkan simulator sekalipun flag/profil lain aktif. Startup memvalidasi token minimal 32 karakter dan binding. Helper/config deployment belum diubah.
+- Rincian yang sebelumnya disebut akan ditetapkan saat implementasi pada DEC-014–DEC-017 mengikuti dokumen desain tahap 0 ini. Implementasi selanjutnya tetap harus membuktikan atomicity, recovery, batas akses, dan kompatibilitas mapping melalui tests.
 
 ## 6. Template keputusan berikutnya
 

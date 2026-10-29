@@ -1,0 +1,78 @@
+openapi: '3.0.3'
+info:
+  title: 'Payment Simulator — Development/Test Only'
+  version: '1.0.0'
+  description: 'Kontrak alat simulasi lokal; bukan API pembayaran publik atau bukti transaksi provider. Aktif hanya dengan profil local/test dan payment.simulator.enabled=true; profil prod selalu menonaktifkan. Listener harus loopback dan token minimal 32 karakter tersedia; implementasi startup harus menegakkan syarat tersebut. Default endpoint tidak tersedia.'
+servers:
+  - url: 'http://127.0.0.1:8084'
+tags:
+  - name: PaymentSimulator
+paths:
+  /internal/dev/payments/{paymentId}/result:
+    post:
+      tags: [PaymentSimulator]
+      operationId: simulatePaymentResult
+      summary: 'Terapkan hasil simulasi pembayaran'
+      description: 'PENDING menjadi SUCCESS/FAILED; hasil final sama menghasilkan 200 tanpa perubahan version/timestamp/efek tambahan. Hasil final bertentangan ditolak 409. Amount dan Order tidak berubah. COD SUCCESS mensimulasikan uang diterima saat penyerahan barang. Saat disabled/profil tidak sesuai, route tidak terdaftar (404).'
+      security:
+        - SimulatorToken: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulatedPaymentResult'
+      responses:
+        '200':
+          description: 'Hasil diterapkan atau hasil terminal identik merupakan no-op'
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Payment'
+        '400':
+          $ref: './openapi.yaml#/components/responses/BadRequest'
+        '401':
+          description: 'Token simulator hilang atau salah; bukan autentikasi customer'
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '404':
+          description: 'Payment tidak ditemukan; atau endpoint tidak terdaftar ketika simulator tidak aktif'
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '409':
+          description: 'PAYMENT_RESULT_CONFLICT untuk hasil final berlawanan; PAYMENT_OPERATION_BUSY untuk kontensi lock'
+          content:
+            application/json:
+              schema:
+                $ref: './openapi.yaml#/components/schemas/Error'
+        '500':
+          $ref: './openapi.yaml#/components/responses/ServerError'
+        '503':
+          $ref: './openapi.yaml#/components/responses/PaymentUnavailable'
+components:
+  securitySchemes:
+    SimulatorToken:
+      type: apiKey
+      in: header
+      name: X-Simulator-Token
+      description: 'Secret environment lokal, minimal 32 karakter, dibandingkan constant-time. Jangan menyimpan secret nyata di spesifikasi, source, image, atau log.'
+  schemas:
+    SimulatedPaymentResult:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [SUCCESS, FAILED]
