@@ -1,8 +1,44 @@
-# Hasil verifikasi Payment — tahap 1 dan 2
+# Hasil verifikasi Payment — tahap 1–3
 
-Tanggal: 29 Oktober 2026. Ini hasil unit tests domain dan tipe aplikasi, bukan verifikasi aplikasi Payment lengkap.
+Tanggal: 29 Oktober 2026. Mencakup unit tests domain/tipe aplikasi dan tests schema/mapping PostgreSQL, belum verifikasi aplikasi Payment lengkap.
 
-## Verifikasi terbaru — tahap 2 commands dan ports
+## Verifikasi terbaru — tahap 3 migrasi dan JPA entities
+
+Perubahan diuji pada working tree di atas commit `ceb6265`. Command aktual, selesai 23:18:32 WIB:
+
+```powershell
+& 'C:\Users\USER\.m2\wrapper\dists\apache-maven-3.9.6-bin\3311e1d4\apache-maven-3.9.6\bin\mvn.cmd' -o '-Dmaven.repo.local=C:\Users\USER\.m2\repository' -pl services/payment-service -am '-Dtest=PaymentTest,OrderSnapshotTest,PaymentCommandsTest,PaymentApplicationTypesTest,PaymentSchemaTest' test
+```
+
+Hasil: **BUILD SUCCESS**, **91 tests**, 0 failures, 0 errors, 0 skipped. PaymentSchemaTest menjalankan 29 tests; empat class unit sebelumnya tetap 62 tests. Run awal 90 tests lulus; run akhir menyertakan tambahan test kontensi dua koneksi dan selesai sekitar 40 detik setelah image tersedia.
+
+Environment aktual: Windows, Maven 3.9.6, runtime Maven/Surefire Java 22.0.2, Spring Boot 4.1.2, Hibernate 7.4.13.Final, Testcontainers 2.0.5, Docker Engine 29.4.0, image postgres:17 yang menjalankan PostgreSQL 17.11. Kompilasi awal memakai `release 17`; inspeksi bytecode entity dan schema test menunjukkan major version 61 (Java 17). Ini belum membuktikan eksekusi pada runtime Java 17. Docker Desktop awalnya tidak aktif, lalu dijalankan untuk tests; pengunduhan image pertama memerlukan sekitar tujuh menit.
+
+PaymentSchemaTest memakai `@DataJpaTest`, PostgreSQL Testcontainers, Flyway asli, dan Hibernate `ddl-auto=validate`. URL datasource selalu berasal dari container disposable, bukan `.env`/database development. Pembersihan tabel hanya dilakukan pada database test tersebut. Tidak menggunakan H2 atau memodifikasi migrasi yang sudah diterapkan.
+
+Cakupan yang dibuktikan:
+
+- Migrasi V1 berhasil pada database kosong, validasi checksum/schema berhasil, migrate berikutnya menerapkan nol perubahan. Hanya ada FK lokal payment_id ke payments; tidak ada FK Order lintas service.
+- Round-trip JPA mempertahankan nilai dan skala `350000.12500`, nol, serta nilai besar berpresisi tinggi; reference lebih dari 1.000 karakter beserta whitespace dan timestamp dipertahankan.
+- Database menolak amount negatif/NaN/Infinity, required value yang hilang, dan enum yang salah.
+- Beberapa FAILED tetap tersimpan, satu PENDING baru diperbolehkan setelah FAILED, dan partial unique index menolak kombinasi aktif/berhasil ganda untuk Order yang sama.
+- Composite key scope operasi unik untuk Order berbeda, case-sensitive, serta menolak pola/panjang key yang invalid; 128 karakter diterima dan 129 ditolak.
+- PROCESSING wajib memiliki owner/lease/fingerprint dan tidak boleh memiliki snapshot; COMPLETED wajib memiliki Payment lokal, respons 201/application/json/body, serta retensi tepat 24 jam. NULL eksplisit pada atribut wajib ditolak oleh CHECK.
+- Mapping ketiga entity berhasil, version baru terisi, owner/lease bisa disimpan, dan teks body respons dibaca kembali persis. Dua writer dengan version Payment sama menyebabkan stale writer ditolak dengan OptimisticLockException. Assignment identik tanpa perubahan waktu tidak menyebabkan update version/timestamp.
+- Dua koneksi nyata: insert duplikat pada partial unique index dan primary key idempotency menunggu transaksi pertama; lock_timeout 250 ms menghasilkan SQLSTATE 55P03, lalu setelah commit duplikat ditolak 23505. Tests tidak memakai sleep untuk membuat race.
+- Rollback transaksi SQL manual yang menulis Payment+COMPLETED mengembalikan database ke klaim PROCESSING semula tanpa Payment parsial.
+
+Batas hasil tahap 3:
+
+- Tests kontensi membuktikan perilaku index PostgreSQL. Fail-fast HTTP 409, guard locking, CAS/takeover/fencing, cleanup, rekonsiliasi commit tidak pasti, dan transaksi adapter belum diimplementasikan atau diuji.
+- Rollback manual bukan bukti implementasi PaymentCreationCommitter; snapshot TEXT bukan bukti encoder JSON sesuai OpenAPI. No-op dirty checking JPA bukan bukti use case hasil final berulang.
+- Index tidak menegakkan seluruh transisi status atau kelayakan Order. Domain dan adapter tahap berikutnya tetap wajib memeriksa policy di bawah guard/lock.
+- Repository, mapper/adapter, client Order, endpoint/simulator, integrasi Order nyata, serta generated PaymentApplicationTests belum dijalankan. Command ini bukan `mvn verify` untuk seluruh aplikasi.
+- Tidak ada perubahan kontrak HTTP pada tahap 3. Unit domain/usecase tetap tanpa import Spring/JPA/HTTP.
+
+File implementasi tahap ini: pom.xml dan application.properties Payment; V1__create_payment_storage.sql; PaymentJpaEntity, PaymentOrderGuardJpaEntity, PaymentIdempotencyJpaEntity, PaymentIdempotencyId, IdempotencyState; PaymentSchemaTest. Status/rincian diselaraskan pada implementation-plan, technical-design, dan architecture.
+
+## Riwayat verifikasi tahap 2 commands dan ports
 
 Command aktual pada 22:53 WIB:
 
@@ -44,7 +80,9 @@ npx.cmd --offline --yes @apidevtools/swagger-cli@4.0.4 validate specs/payment-si
 
 Keduanya valid. Validator menemukan duplikasi YAML pada edit tahap 0 awal; perbaikan dilakukan sebelum validasi akhir. Tool ini dipakai hanya sebagai validator sementara dari cache npm; tidak ditambahkan sebagai dependency aplikasi.
 
-## Batas verifikasi
+## Batas verifikasi tahap 1–2 (historis)
+
+Catatan berikut menggambarkan batas sebelum tahap 3. Bukti PostgreSQL/JPA terbaru ada pada bagian tahap 3 di atas.
 
 - Domain immutable, murni Java: perubahan reference/status menghasilkan instance baru; hasil terminal identik mengembalikan instance yang sama. Factory restore hanya untuk rekonstruksi data persistence, bukan endpoint perubahan status.
 - OrderSnapshot dan enum Status bersarang dimiliki Payment; tidak mengimpor module/DTO/entity Order. Invalid snapshot remote nantinya harus dipetakan Order REST adapter sebagai error dependency, bukan dianggap input client.

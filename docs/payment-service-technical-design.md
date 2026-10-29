@@ -1,6 +1,6 @@
 # Desain teknis Payment Service — tahap 0
 
-Status: rancangan implementasi, 29 Oktober 2026. Belum ada class bisnis, migrasi, atau konfigurasi runtime Payment yang dibuat pada tahap ini. Acuan: DEC-012–DEC-017 pada [decisions.md](decisions.md), [alur implementasi](payment-service-implementation-plan.md), [kontrak publik](../specs/openapi.yaml), dan [kontrak simulator](../specs/payment-simulator.openapi.yaml).
+Desain awal: tahap 0, 29 Oktober 2026; dilengkapi catatan implementasi tahap 1–3. Domain, commands/ports, migrasi, dan JPA entities sudah tersedia. Repository, persistence adapter, use case, client Order, dan endpoint belum diimplementasikan. Acuan: DEC-012–DEC-018 pada [decisions.md](decisions.md), [alur implementasi](payment-service-implementation-plan.md), [kontrak publik](../specs/openapi.yaml), dan [kontrak simulator](../specs/payment-simulator.openapi.yaml). Hasil verifikasi aktual dicatat pada [payment-service-testing.md](payment-service-testing.md).
 
 ## 1. Batas dan komponen
 
@@ -36,7 +36,7 @@ Tipe aplikasi berada di `usecase.model`: IdempotencyKey (scope operasi tetap), I
 
 ## 3. Rancangan data lokal
 
-Ini rancangan untuk tahap migrasi, bukan SQL yang telah diterapkan.
+Schema di bawah diwujudkan pada `V1__create_payment_storage.sql` di Payment Service. Tidak ditemukan migrasi terdahulu pada service ini; tidak ada migrasi lama atau database development yang diubah.
 
 | Tabel | Kolom/constraint penting |
 |---|---|
@@ -50,6 +50,19 @@ Ini rancangan untuk tahap migrasi, bukan SQL yang telah diterapkan.
 - NUMERIC tidak dipaksa menjadi scale 2. JPA mapping, JSON parser/encoder, dan schema validation harus mempertahankan 350000.125, bukan hanya migrasinya. Ini perlu dibuktikan pada tests PostgreSQL.
 - COMPLETED harus memiliki snapshot respons 201, payment_id, completed_at dan expires_at. PROCESSING memiliki pemilik dan lease, bukan snapshot sukses. Gunakan CHECK konsistensi sesuai state; response body disimpan sebagai TEXT agar representasi JSON awal tidak diubah oleh JSONB.
 - Idempotency key memakai equality case-sensitive/deterministik pada PostgreSQL; jangan memakai citext atau collation case-insensitive. Timestamps memakai Instant/TIMESTAMPTZ; lease dan expiry memakai clock database agar antar-instance konsisten.
+
+### Detail mapping tahap 3
+
+- `PaymentJpaEntity`, `PaymentOrderGuardJpaEntity`, dan `PaymentIdempotencyJpaEntity` berada di `adapter.outbound.database.entity`. Domain Payment tidak diubah menjadi JPA entity. `IdempotencyState` adalah state penyimpanan operasi, bukan status pembayaran.
+- `payments_seq` memakai increment 50, sesuai `@SequenceGenerator(allocationSize = 50)`. ID Payment tetap Long; gap sequence normal dan bukan urutan bisnis.
+- `(operation,key)` menjadi composite primary key melalui `PaymentIdempotencyId` (`@EmbeddedId`); kolom memakai collation `C`. Equality Java juga case-sensitive. Tidak menambahkan identifier resource UUID.
+- Ketiga entity memakai nullable `@Version Long` di Java; database menyimpan version NOT NULL. Guard dan catatan idempotency dengan assigned ID tetap terdeteksi sebagai entity baru ketika version masih null.
+- `amount` dipetakan ke `numeric` tanpa precision/scale tetap. Reference dan body replay memakai TEXT, tanpa `@Lob`/JSONB, agar teks tidak dipangkas atau diserialisasi ulang. `payment_id` dipetakan sebagai scalar Long dengan FK lokal dari Flyway, tanpa association eager.
+- CHECK membedakan PROCESSING tanpa snapshot dari COMPLETED dengan payment_id, respons 201/application/json, body, completed_at, dan expires_at tepat 24 jam kemudian. Owner/lease tetap tersimpan saat COMPLETED. Index terpisah mendukung pencarian lease PROCESSING dan cleanup COMPLETED expired; tidak ada cleanup otomatis pada tahap ini.
+- Waktu pada constructor/update entity dipasok caller dari clock database. Tidak ada callback yang memakai clock JVM atau otomatis mengubah timestamp saat read/no-op. Mapper/adapter berikutnya harus memperbarui entity managed setelah locking, mempertahankan id/version/createdAt, dan tidak memanggil update pada hasil domain no-op.
+- `order_id`, method, fingerprint pada catatan klaim tidak berubah melalui update JPA biasa. Penggantian key expired untuk request baru nantinya memerlukan delete/insert atau SQL atomik di bawah lock; tidak cukup mengganti payload pada instance lama.
+- Metode entity hanya assignment state penyimpanan. Pemeriksaan pemilik, fencing, lease, policy bisnis, urutan lock, dan finalisasi atomik belum diimplementasikan. Partial index tidak sendirian melarang semua transisi ilegal atau setiap attempt baru setelah SUCCESS; adapter/domain tetap wajib menegakkan policy lengkap.
+- Konfigurasi runtime memakai `ddl-auto=validate`, Flyway aktif, baseline otomatis/out-of-order nonaktif. Tidak memakai Hibernate untuk membuat atau mengubah schema.
 
 ## 4. Klaim, transaksi, dan recovery
 
@@ -118,4 +131,4 @@ Simbol exception transport/SQL dipetakan adapter; core memakai exception aplikas
 - Mapping JPA/JSON mempertahankan pecahan; tests menegaskan reference dan state terminal serta no-op final identik.
 - Simulator benar-benar tidak ada pada profil/default yang tidak diizinkan, prod override, flag false, dan token invalid; tes startup memeriksa loopback/token.
 
-Verifikasi tahap 0: kontrak publik dan simulator telah lolos validator OpenAPI; ini validasi spesifikasi, bukan bukti runtime. Domain tahap 1 dan command/port/tipe aplikasi tahap 2 diimplementasikan dengan 62 unit tests gabungan lulus; lihat [hasil tests](payment-service-testing.md). Klaim, transaksi, locking, mapping persistence, client, dan endpoint belum memiliki implementasi/bukti runtime. Urutan berikutnya adalah tahap 3 (migrasi/JPA), lalu repository, adapter, use case, HTTP, handler, dan verifikasi gabungan.
+Verifikasi tahap 0: kontrak publik dan simulator telah lolos validator OpenAPI; ini validasi spesifikasi, bukan bukti runtime. Tahap 1–2 memiliki 62 unit tests; tahap 3 menambahkan tests migrasi/constraint dan mapping JPA dengan PostgreSQL 17 terisolasi. Lihat command, hasil, dan batas aktual pada [hasil tests](payment-service-testing.md). Protokol klaim, transaksi adapter, locking guard/fencing, client, dan endpoint belum memiliki implementasi/bukti runtime. Urutan berikutnya adalah repository (tahap 4), lalu adapter, use case, HTTP, handler, dan verifikasi gabungan.

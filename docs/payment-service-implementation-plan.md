@@ -2,7 +2,7 @@
 
 Dokumen ini adalah rencana pekerjaan, bukan hasil implementasi.
 
-Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain) dan tahap 2 (commands, ports, tipe aplikasi) selesai dengan 62 unit tests gabungan lulus; rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 3–10 belum dikerjakan; transaksi/locking serta endpoint belum diimplementasikan.
+Tahap 0 telah dirumuskan pada [payment-service-technical-design.md](payment-service-technical-design.md) dan DEC-018; kontrak simulator tersedia di [payment-simulator.openapi.yaml](../specs/payment-simulator.openapi.yaml). Kedua kontrak lolos validasi OpenAPI. Tahap 1 (domain), tahap 2 (commands, ports, tipe aplikasi), dan tahap 3 (migrasi/JPA entities) selesai dengan 91 tests gabungan lulus: 62 unit dan 29 tests schema/mapping pada PostgreSQL 17.11 terisolasi. Rincian dan batas hasil ada pada [payment-service-testing.md](payment-service-testing.md). Tahap 4–10 belum dikerjakan; repository, adapter transaksi/locking, dan endpoint belum diimplementasikan.
 
 Acuan urutan: bagian 4 dan 5 pada `.codex/alur-pekerjaan-developer-setiap-service.md`. Acuan perilaku: [decisions.md](decisions.md), khususnya DEC-012 sampai DEC-017, [business-rules.md](business-rules.md), dan [OpenAPI](../specs/openapi.yaml). Alur lama dipertahankan; idempotency dan simulator ditambahkan sesuai keputusan terbaru. Rujukan historis di `.codex` tidak menggantikan kontrak/keputusan terbaru.
 
@@ -131,6 +131,8 @@ Tulis tests untuk validasi command/tipe aplikasi yang memiliki logika.
 ## Tahap 3 — Migrasi dan JPA entities
 
 Hasil: migrasi `payments`, penyimpanan idempotency sesuai desain, JPA entities terpisah dari domain, dan schema tests.
+
+Status: selesai. `V1__create_payment_storage.sql` membuat payments, payment_order_guards, dan payment_idempotency. Mapping JPA tervalidasi dengan Flyway/PostgreSQL 17; tests juga memeriksa presisi amount, state/snapshot idempotency, unique index saat dua koneksi bersamaan, dan optimistic locking. Ini belum membuktikan protokol transaksi/claim/fencing adapter yang baru dikerjakan pada tahap 4–5.
 
 ```text
 Gunakan $flyway-migrations, $spring-data-jpa, dan $testing-pyramid.
