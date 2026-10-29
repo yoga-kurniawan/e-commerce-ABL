@@ -5,8 +5,8 @@
 	<parent>
 		<groupId>id.ac.ub.abl</groupId>
 		<artifactId>ecommerce-microservices</artifactId>
-    		<version>0.1.0-SNAPSHOT</version>
-    		<relativePath>../../pom.xml</relativePath>
+		<version>0.1.0-SNAPSHOT</version>
+		<relativePath>../../pom.xml</relativePath>
 	</parent>
 	<groupId>id.ac.ub.abl</groupId>
 	<artifactId>cart-service</artifactId>
@@ -30,6 +30,16 @@
 		<java.version>17</java.version>
 	</properties>
 	<dependencies>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
