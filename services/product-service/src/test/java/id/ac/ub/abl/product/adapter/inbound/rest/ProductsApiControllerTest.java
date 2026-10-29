@@ -47,6 +47,40 @@ class ProductsApiControllerTest {
     }
 
     @Test
+    void missingProductsReturn404ForReadReplacePatchAndDelete() throws Exception {
+        String path = BASE + "/" + Long.MAX_VALUE;
+        http.perform(get(path)).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Produk tidak ditemukan"));
+        http.perform(put(path).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Mouse\",\"price\":1,\"stock\":1}"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        http.perform(patch(path).contentType(MediaType.APPLICATION_JSON).content("{\"stock\":0}"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        http.perform(delete(path)).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        assertEquals(0, repository.count());
+    }
+
+    @Test
+    void inactiveProductsReturn404AndCannotBeReactivatedThroughUpdates() throws Exception {
+        long id = createProduct();
+        String path = BASE + "/" + id;
+        http.perform(delete(path)).andExpect(status().isNoContent());
+        http.perform(get(path)).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        http.perform(put(path).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Mouse\",\"price\":1,\"stock\":1}"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        http.perform(patch(path).contentType(MediaType.APPLICATION_JSON).content("{\"stock\":0}"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        http.perform(delete(path)).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        var historical = repository.findById(id).orElseThrow();
+        assertFalse(historical.isActive());
+        assertEquals("Keyboard", historical.getName());
+        assertEquals(20, historical.getStock());
+    }
+
+    @Test
     void createsProductAndServesItThroughDetailAndList() throws Exception {
         http.perform(get(BASE)).andExpect(status().isOk()).andExpect(content().json("[]"));
         long id = createProduct();
@@ -103,11 +137,13 @@ class ProductsApiControllerTest {
             "{\"name\":\"Keyboard\",\"price\":1,\"stock\":-1}"})
     void invalidCreateAndPutReturn400WithoutChangingData(String body) throws Exception {
         http.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.message").isString());
         assertEquals(0, repository.count());
         long id = createProduct();
         http.perform(put(BASE + "/{id}", id).contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
         assertEquals("Keyboard", repository.findById(id).orElseThrow().getName());
         assertEquals(20, repository.findById(id).orElseThrow().getStock());
     }
@@ -118,7 +154,7 @@ class ProductsApiControllerTest {
     void invalidPatchReturns400WithoutChangingData(String body) throws Exception {
         long id = createProduct();
         http.perform(patch(BASE + "/{id}", id).contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
         assertEquals(20, repository.findById(id).orElseThrow().getStock());
         assertTrue(repository.findById(id).orElseThrow().isActive());
     }
@@ -126,8 +162,9 @@ class ProductsApiControllerTest {
     @Test
     void malformedJsonAndNonIntegerPathReturn400() throws Exception {
         http.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content("{"))
-                .andExpect(status().isBadRequest());
-        http.perform(get(BASE + "/not-an-id")).andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        http.perform(get(BASE + "/not-an-id")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
         assertEquals(0, repository.count());
     }
 
