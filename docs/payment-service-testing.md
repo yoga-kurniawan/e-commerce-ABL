@@ -1,8 +1,35 @@
-# Hasil verifikasi Payment — tahap 1–4
+# Hasil verifikasi Payment — tahap 1–5
 
 Tanggal: 29 Oktober 2026. Mencakup unit tests domain/tipe aplikasi dan tests schema/mapping PostgreSQL, belum verifikasi aplikasi Payment lengkap.
 
-## Verifikasi terbaru — tahap 4 repository
+## Verifikasi terbaru — tahap 5 persistence adapter
+
+Working tree di atas commit `703c232`, selesai 29 Oktober 2026 pukul 23:38:28 WIB. Command aktual:
+
+```powershell
+& 'C:\Users\USER\.m2\wrapper\dists\apache-maven-3.9.6-bin\3311e1d4\apache-maven-3.9.6\bin\mvn.cmd' -o '-Dmaven.repo.local=C:\Users\USER\.m2\repository' -pl services/payment-service -am '-Dtest=PaymentPersistenceAdaptersTest,PaymentRepositoriesTest,PaymentSchemaTest,PaymentTest,OrderSnapshotTest,PaymentCommandsTest,PaymentApplicationTypesTest' test > services/payment-service/target/payment-stage5-test.log 2>&1
+exit $LASTEXITCODE
+```
+
+**BUILD SUCCESS; exit code 0; 117 tests, 0 failures, 0 errors, 0 skipped.** PaymentPersistenceAdaptersTest 14, repository 12, schema 29, unit tests 62. Run awal dengan 11 tests adapter lulus; run akhir menambahkan fault acknowledgment commit, kontensi mutasi dan balapan hasil terminal. Maven 3.9.6, Java runtime 22.0.2, target release 17, Spring Boot 4.1.2, Hibernate 7.4.13.Final, Testcontainers 2.0.5, PostgreSQL 17.11. Runtime Java 17 belum diuji. Log dan XML Surefire berada di target Payment Service.
+
+Pengujian menggunakan DataJpaTest + Flyway asli pada container disposable. Adapter dipanggil melalui port/implementasinya dengan transaksi PostgreSQL nyata; encoder produksi diganti bean khusus test, bukan mock database. Tidak memodifikasi database development.
+
+Bukti tahap 5:
+
+- Mapping mempertahankan 350000.12500, reference dengan whitespace, dan ID; hasil create serta snapshot commit bersama. Setelah Payment menjadi SUCCESS, replay/inspect tetap mengembalikan teks respons awal PENDING. TTL tepat 24 jam dan retry tidak memperpanjangnya.
+- Klaim aktif membedakan in-progress dan payload mismatch. Lease expired diambil alih dengan token baru; pemilik lama tidak dapat finalisasi/release. Lease expired tanpa takeover juga tidak dapat finalisasi.
+- Encoder gagal sesudah insert Payment memicu rollback: Payment tidak ada, klaim tetap PROCESSING. Release eksplisit yang aman memungkinkan retry; release tidak menghapus hasil COMPLETED.
+- Fixtures timestamp relatif terhadap clock database menguji lease/retensi tanpa sleep. COMPLETED expired dapat diganti payload baru; cleanup mempertahankan Payment dan PROCESSING, serta membatasi batch.
+- FAILED memungkinkan attempt baru, PENDING/SUCCESS menghalangi attempt baru, hasil final identik mempertahankan version/created_at/updated_at, PATCH terminal dan hasil berlawanan ditolak. Snapshot Order salah ID atau CANCELLED tidak meninggalkan Payment.
+- Dua thread/koneksi dengan latch: key sama mendapat satu owner; key berbeda untuk Order sama menghasilkan satu Payment; lease habis saat finalisasi memegang lock tidak dapat diambil alih. Mutasi pada guard sibuk mendapat PAYMENT_OPERATION_BUSY tanpa perubahan. SUCCESS vs FAILED bersamaan menghasilkan satu transisi dan satu konflik, version hanya naik sekali.
+- Fault injection setelah commit PostgreSQL berhasil menghasilkan DEPENDENCY_UNAVAILABLE; inspect pada transaksi baru menemukan COMPLETED, retry memperoleh replay, dan hanya satu Payment tersimpan. Klaim tidak dihapus otomatis.
+
+Batas: encoder test hanya membuktikan penyimpanan teks/rollback, belum schema JSON OpenAPI produksi. Tidak melakukan pemutusan socket database sungguhan, integrasi Order nyata, HTTP 409/503, controller/simulator, atau full Maven verify/generated PaymentApplicationTests. Orkestrator tahap 7 masih harus memanggil inspect/release dengan benar dan membedakan rollback pasti dari hasil commit ambigu. Clock tests mengatur timestamp fixtures database; tidak mengganti clock server atau menguji drift antar-host. Kegagalan DB tidak diubah menjadi Missing; jaminan recovery juga bergantung pada database dapat dibaca kembali.
+
+File baru: PaymentPersistenceMapper, PaymentPersistenceAdapter, PaymentIdempotencyAdapter, PaymentCreationPersistenceAdapter, PaymentTransactions, PaymentOperationException, dan PaymentPersistenceAdaptersTest. Status/rincian diselaraskan pada implementation-plan, technical-design, dan architecture. Domain, migrasi dan OpenAPI tetap mengikuti tahap sebelumnya.
+
+## Riwayat tahap 4 repository
 
 Working tree di atas commit `541fc89`, selesai 29 Oktober 2026 pukul 23:27:46 WIB. Command aktual (output diarahkan ke log sementara saat eksekusi):
 
