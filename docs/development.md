@@ -115,13 +115,15 @@ Database hanya dipublish ke `127.0.0.1` pada port host yang ditetapkan. Ini setu
 
 ## 7. Migrasi dan tests
 
+Product menyediakan V1 untuk tabel `products` dan V2 untuk kolom `active` (default TRUE bagi data lama). Jangan mengubah V1 yang telah diterapkan. Test PostgreSQL memakai Testcontainers dan memerlukan Docker aktif, tanpa menjalankan Compose database development.
+
 Lokasi migrasi: `services/<service>-service/src/main/resources/db/migration/`.
 
 - Jika belum ada migrasi, mulai dari V1; jika versi sebelumnya sudah diterapkan, tambahkan versi berikutnya.
 - Flyway mengelola perubahan skema; Hibernate validate memeriksa mapping JPA.
 - Domain bisnis berbeda dari JPA entity; relasi/FK hanya dalam database layanan yang sama.
 - Source service, migrasi, dan test belum otomatis dilengkapi oleh setup database ini.
-- Generated context test memerlukan konfigurasi datasource pengujian. Jangan menjalankan tests terhadap database development berisi data penting tanpa mengatur isolasi fixture/profile.
+- Context test Product sudah menyediakan datasource PostgreSQL terisolasi melalui Testcontainers, termasuk test server HTTP pada port acak. Test service lain masih memerlukan konfigurasi datasource pengujian. Jangan menjalankan tests terhadap database development berisi data penting tanpa mengatur isolasi fixture/profile.
 
 Pengembangan domain/unit test tidak membutuhkan cluster. Lihat [testing.md](testing.md) untuk rencana tests dan [decisions.md](decisions.md) untuk aturan bisnis yang belum ditentukan.
 

@@ -4,7 +4,7 @@
 
 ## 1. Status dan tujuan
 
-Dokumen ini adalah rencana pengujian, bukan laporan hasil. Berdasarkan progres developer, `./mvnw validate` telah berhasil. Belum ada bukti tests bisnis, eksekusi seluruh operasi, atau load test selesai. Target kini 18 operasi pada 10 path setelah penambahan kontrak create Cart (OPEN-001 B).
+Dokumen ini berisi rencana pengujian bersama. Hasil aktual Product tersedia pada [hasil pengujian Product](product-service-testing.md): 80 tests lulus melalui `verify` per module, termasuk enam operasi HTTP dan PostgreSQL terisolasi. Eksekusi gabungan 17 operasi lintas service dan load test belum selesai.
 
 Laporan h. 25 dan 45 menjelaskan pemeriksaan kontrak menggunakan Swagger Editor. Contoh request/response dinyatakan sebagai ilustrasi pada h. 16. Validasi kontrak tidak membuktikan aplikasi mematuhi kontrak atau pembayaran selesai.
 
@@ -67,6 +67,8 @@ Semua path memiliki prefix `/api/v1`. Setiap baris adalah target pengujian setel
 ## 5. Skenario gagal dan invariant
 
 ### Product
+
+- DEC-011: DELETE mempertahankan baris dan atribut produk dengan `active=false`; lookup/list tidak menampilkannya. Uji juga GET/update/delete ulang terhadap produk nonaktif serta migrasi data V1 ke V2.
 
 - Create/PUT dengan harga atau stok negatif ditolak; field wajib yang hilang ditangani sebagai 400.
 - Lookup/update ID yang tidak ada menghasilkan 404 pada operasi yang mendokumentasikannya.

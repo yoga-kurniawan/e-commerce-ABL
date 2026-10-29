@@ -31,7 +31,11 @@ Ketentuan sumber, h. 12, 21–22, 28–31, 38–40:
 - PATCH mengubah atribut yang dikirim; atribut lain tetap. Schema PATCH memuat `minProperties: 1`.
 - DELETE perlu mempertimbangkan keterkaitan dengan transaksi. Soft delete/penonaktifan adalah pilihan yang disebut laporan, belum satu-satunya kebijakan yang diwajibkan.
 
-Belum dirinci: nama kosong/panjang nama, presisi/skala mata uang, pembulatan, optimistic locking, definisi produk tidak aktif, dan policy penghapusan final. Jangan menganggap schema asal sudah memiliki `minLength`, `maxLength`, atau `additionalProperties: false`.
+Keputusan project DEC-011: DELETE memakai soft delete (`active=false`). GET/list hanya menampilkan produk aktif; GET/PUT/PATCH/DELETE terhadap produk nonaktif menghasilkan 404. Data terakhir tetap ada di database, tanpa endpoint history atau reaktivasi. Atribut `active` hanya internal. Tidak ada pengecekan keterkaitan transaksi pada policy ini; kondisi 409 belum diterapkan.
+
+PATCH kosong ditolak. Null eksplisit pada name/price/stock ditolak karena atribut wajib domain dan schema tidak menyatakan nullable; field yang tidak dikirim tetap dipertahankan.
+
+Belum dirinci: nama kosong/panjang nama, presisi/skala mata uang, pembulatan, dan optimistic locking. Jangan menganggap schema asal sudah memiliki `minLength`, `maxLength`, atau `additionalProperties: false`.
 
 ## 3. Cart Service
 

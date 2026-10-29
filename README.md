@@ -4,7 +4,7 @@ Backend e-commerce untuk project mata kuliah **Arsitektur Berbasis Layanan**, ke
 
 Struktur kode dirancang untuk memisahkan model domain, koordinator use case, serta adapter HTTP dan database. Kontrak API menjadi acuan implementasi dan pengujian setiap service.
 
-**Status: tahap skeleton dan pengembangan.** Parent Maven serta empat module sudah lolos `./mvnw validate`; implementasi bisnis, database, dan tests belum dikonfirmasi selesai. Contoh request di bawah adalah panduan pengujian **setelah endpoint terkait diimplementasikan**, bukan hasil eksekusi yang sudah lulus.
+**Status: Product selesai diverifikasi secara terisolasi; tiga service lain masih dalam pengembangan.** Product sudah memiliki enam endpoint, migrasi PostgreSQL, dan soft delete; `./mvnw -pl services/product-service -am verify` lulus 80 tests. Rincian dan batas bukti ada pada [hasil pengujian Product](docs/product-service-testing.md). Contoh alur lintas service di bawah tetap merupakan panduan, bukan hasil integrasi yang sudah lulus.
 
 ## Daftar isi
 
@@ -59,6 +59,8 @@ Kontrak diperluas dari baseline 17 operasi pada 9 path melalui keputusan OPEN-00
 Base URL publik yang direncanakan adalah `http://localhost:8080/api/v1` melalui pintu masuk API. Saat gateway belum berjalan, gunakan port service masing-masing. Dalam Kubernetes, aplikasi dapat memakai port container 8080 pada Pod berbeda.
 
 ## Database per service
+
+Product menggunakan soft delete sesuai DEC-011: data terakhir tetap di tabel `products` dengan `active=false`, sementara lookup/list katalog hanya membaca produk aktif. Ini tidak menyediakan audit seluruh perubahan atau endpoint history. Migrasi V2 menambahkan status aktif tanpa mengubah migrasi V1. Implementasi HTTP masih dikerjakan bertahap.
 
 ```text
 product-service → product_db
@@ -448,9 +450,9 @@ Status pengembangan per **29 Oktober 2026**:
 | Struktur package domain/usecase/adapter | Mulai disiapkan; kelengkapan kelas bisnis belum diverifikasi |
 | Kontrak OpenAPI | Sudah disalin ke project Ubuntu |
 | Docker daemon | Periksa pada sistem operasi yang sedang digunakan |
-| Database dan endpoint bisnis | Belum dikonfirmasi siap |
+| Database dan endpoint bisnis | Product lulus tests PostgreSQL terisolasi dan HTTP; database development serta tiga service lain belum diverifikasi |
 | Cluster/deployment | Dockerfile dan Helm chart aplikasi tersedia; runtime cluster belum diuji |
-| Tests bisnis dan pengujian beban | Belum ada hasil yang dikonfirmasi |
+| Tests bisnis dan pengujian beban | Product: 80 tests lulus; lintas service dan beban belum diuji |
 
 Prioritas: putuskan isu terbuka, siapkan database/config development, implementasikan Product → Cart → Order → Payment, lalu uji kontrak dan integrasi. Stock reservation, idempotency, dan verifikasi pembayaran final memerlukan rancangan lanjutan.
 
