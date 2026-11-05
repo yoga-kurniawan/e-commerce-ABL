@@ -104,6 +104,11 @@ Client URL otomatis memakai `<release>-product-service:8080`, `<release>-cart-se
 
 Gunakan file override tanpa kredensial untuk lingkungan tertentu, lalu tambahkan `-f <override.yaml>` pada lint/template/install. Gunakan nama release dan namespace secara konsisten.
 
+Panduan bertahap untuk anggota tim tersedia pada
+[Panduan deployment Minikube dan Istio untuk tim](panduan-deployment-tim.md).
+Panduan tersebut memakai profil `ecommerce-abl`, manifest database terpisah,
+dan file tahap Helm kumulatif untuk Product, Cart, Order, serta Payment.
+
 ## 4. Tahap cluster nanti: Secret
 
 Bagian ini dijalankan setelah cluster dan database siap. Contoh memakai namespace `ecommerce` dan release `abl`. Pembuatan namespace berikut berlaku di kedua shell:

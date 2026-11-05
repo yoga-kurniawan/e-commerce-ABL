@@ -1,0 +1,10 @@
+# Cumulative stage: retain earlier services in the same Helm release.
+services:
+  product:
+    enabled: true
+  cart:
+    enabled: true
+  order:
+    enabled: true
+  payment:
+    enabled: true
