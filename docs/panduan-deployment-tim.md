@@ -101,7 +101,7 @@ minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl get namespace ecomm
 ```
 
 Label harus ada sebelum Pod aplikasi dibuat. Pod database sengaja tidak diberi
-sidecar melalui annotation di manifest. Pod aplikasi ditargetkan mempunyai
+sidecar melalui label pada template Pod di manifest. Pod aplikasi ditargetkan mempunyai
 container aplikasi dan `istio-proxy`.
 
 ## 4. Langkah yang diulang oleh pemilik setiap service

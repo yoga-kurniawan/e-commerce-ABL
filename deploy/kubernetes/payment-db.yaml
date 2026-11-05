@@ -18,9 +18,9 @@ spec:
   selector:
     app.kubernetes.io/name: payment-db
   ports:
-    - name: postgres
+    - name: tcp-postgres
       port: 5432
-      targetPort: postgres
+      targetPort: tcp-postgres
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -39,7 +39,6 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: payment-db
-      annotations:
         # Database traffic is direct PostgreSQL TCP; application Pods use Istio.
         sidecar.istio.io/inject: "false"
     spec:
@@ -62,7 +61,7 @@ spec:
             capabilities:
               drop: ["ALL"]
           ports:
-            - name: postgres
+            - name: tcp-postgres
               containerPort: 5432
           env:
             - name: POSTGRES_DB
