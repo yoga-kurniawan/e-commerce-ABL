@@ -1,0 +1,23 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: cart-route
+  namespace: ecommerce
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - istio-system/ecommerce-gateway
+  http:
+    - name: cart-api
+      match:
+        - uri:
+            exact: /api/v1/carts
+        - uri:
+            prefix: /api/v1/carts/
+      route:
+        - destination:
+            host: abl-cart-service.ecommerce.svc.cluster.local
+            port:
+              number: 8080
+      timeout: 15s

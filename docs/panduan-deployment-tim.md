@@ -14,7 +14,7 @@ dijalankan dari root repository `e-commerce-ABL`.
 | Alamat antarservice | localhost:8081–8084 | DNS Service Kubernetes, port 8080 |
 | Kredensial | `.env` lokal | Secret Kubernetes |
 | Akses awal dari laptop | Port aplikasi langsung | Port-forward untuk uji langsung |
-| Akses melalui Istio ingress | Belum digunakan | Memerlukan konfigurasi route gateway tersendiri |
+| Akses melalui Istio ingress | Belum digunakan | Gateway bersama dan route per service di `deploy/istio/` |
 
 Menutup terminal `kubectl port-forward` hanya menutup akses dari laptop;
 Pod aplikasi tetap berjalan. Docker Desktop dan Minikube harus tetap aktif.
@@ -169,8 +169,10 @@ mendukung NetworkPolicy; kindnet bawaan tidak menjamin enforcement tersebut.
 ### 4.3 Build dan muat image
 
 ```bash
-docker build -f "services/${SERVICE}-service/Dockerfile" -t "ecommerce/${SERVICE}-service:0.1.0-local" .
-minikube -p ecommerce-abl image load "ecommerce/${SERVICE}-service:0.1.0-local"
+IMAGE_TAG=0.1.0-local
+if [ "$SERVICE" = product ]; then IMAGE_TAG=0.1.1-local; fi
+docker build -f "services/${SERVICE}-service/Dockerfile" -t "ecommerce/${SERVICE}-service:${IMAGE_TAG}" .
+minikube -p ecommerce-abl image load "ecommerce/${SERVICE}-service:${IMAGE_TAG}"
 minikube -p ecommerce-abl image ls
 ```
 
@@ -244,7 +246,10 @@ curl -i -X POST http://127.0.0.1:18081/api/v1/products \
 curl -i http://127.0.0.1:18081/api/v1/products
 ```
 
-Target: POST 201, GET 200; catat productId.
+Target: POST 201, GET 200; catat productId. Product mengembalikan Location
+berbentuk path relatif, misalnya `/api/v1/products/3`. Gabungkan dengan origin
+request: pada gateway lokal menjadi `http://127.0.0.1:18080/api/v1/products/3`.
+Ini mempertahankan port publik meskipun alamat yang dilihat backend berbeda.
 
 ### Cart
 
@@ -295,10 +300,60 @@ menghasilkan 404. Simulator pembayaran tidak dibutuhkan dan tetap nonaktif.
 
 Istio control plane aktif, sidecar terpasang, dan API melalui port-forward
 berhasil adalah bukti tahap aplikasi Kubernetes. Itu belum membuktikan routing
-ingress. Chart aplikasi saat ini tidak membuat Gateway atau VirtualService.
-Konfigurasi routing disiapkan pada tahap gateway tersendiri, lalu GET/POST
-diulang melalui alamat ingress. Jangan menyatakan deployment sesuai arsitektur
-lengkap selesai sebelum bukti gateway dan alur antarservice tersedia.
+ingress. Chart aplikasi tidak membuat Gateway atau VirtualService; manifest
+terpisah tersedia di `deploy/istio/`. Terapkan route hanya setelah aplikasi
+service tersebut Ready. Product bisa diuji lebih dahulu tanpa Cart/Order/Payment.
+
+```bash
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply --dry-run=server -f deploy/istio/gateway.yaml -f "deploy/istio/${SERVICE}-route.yaml"
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply -f deploy/istio/gateway.yaml -f "deploy/istio/${SERVICE}-route.yaml"
+istioctl analyze --context=ecommerce-abl -n ecommerce
+```
+
+Gateway bersama berada di namespace istio-system, tempat Pod ingress berada.
+Route aplikasi berada di ecommerce dan merujuk `istio-system/ecommerce-gateway`.
+Route mempertahankan path `/api/v1/<resource>` tanpa rewrite dan hanya menerima
+path collection tepat atau detail dengan pemisah `/`. Host wildcard dan HTTP
+dipakai untuk lab lokal ini; konfigurasi domain/TLS lingkungan lain perlu
+disesuaikan. Pola mengikuti [panduan ingress Istio](https://istio.io/latest/docs/tasks/traffic-management/ingress/ingress-control/).
+
+Buka terminal khusus untuk akses gateway dari laptop:
+
+```bash
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n istio-system port-forward service/istio-ingressgateway 18080:80
+```
+
+Biarkan terminal tersebut berjalan, lalu di terminal pengujian:
+
+```bash
+curl -i http://127.0.0.1:18080/api/v1/products
+```
+
+Target: 200 dengan daftar Product dari database cluster. Ulangi POST dan GET
+pada bagian 5 dengan port **18080** untuk seluruh service yang route-nya sudah
+diterapkan. Jangan mengasumsikan ID dari database Compose. Satu port-forward ke
+gateway cukup untuk akses ini. Berbeda dari port-forward langsung ke Service
+aplikasi, jalur ini melewati Envoy ingress dan VirtualService:
+
+```text
+curl localhost:18080 -> Istio ingressgateway -> route service
+                    -> Pod aplikasi dengan sidecar -> PostgreSQL cluster
+```
+
+Port-forward gateway masih diperlukan untuk membawa trafik laptop ke cluster
+Docker Desktop; ini belum membuktikan akses LoadBalancer eksternal atau TLS.
+Simpan bukti GET dan POST melalui gateway, bukan hanya status Pod. Setelah route
+baru dipasang, ulangi `istioctl analyze` dan request API. Jangan menyatakan semua
+service selesai sebelum seluruh route dan alur antarservice diuji.
+
+Jika perlu membatalkan route service tanpa menghentikan aplikasinya:
+
+```bash
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl delete -f "deploy/istio/${SERVICE}-route.yaml"
+```
+
+Gateway bersama tetap digunakan service lain; jangan menghapusnya untuk
+membatalkan satu route. Perubahan route terpisah dari riwayat rollback Helm.
 
 ## 7. Jika deployment atau pengujian gagal
 

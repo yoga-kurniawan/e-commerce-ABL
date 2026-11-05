@@ -471,7 +471,7 @@ Contoh ID dan nominal pada panduan ini adalah ilustrasi. Sesuaikan dengan fixtur
 Empat Dockerfile tersedia pada tiap folder service dan Helm chart aplikasi di `deploy/helm/ecommerce/`. Command berikut sama pada Windows PowerShell dan Linux Bash, dari root repository dengan Docker Linux container engine aktif:
 
 ```console
-docker build -f services/product-service/Dockerfile -t ecommerce/product-service:0.1.0-local .
+docker build -f services/product-service/Dockerfile -t ecommerce/product-service:0.1.1-local .
 helm lint deploy/helm/ecommerce
 helm template abl deploy/helm/ecommerce --namespace ecommerce --output-dir rendered
 ```

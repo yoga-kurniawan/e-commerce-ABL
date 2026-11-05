@@ -54,3 +54,17 @@ Laporan otomatis tersimpan di `services/product-service/target/surefire-reports/
 - Warning metadata repository Flyway HTTP 401 muncul, tetapi pengujian dan packaging tetap berhasil. Stack trace pada test 500 merupakan exception yang sengaja dipicu.
 
 Untuk mengulang seluruh verifikasi Product, aktifkan Docker lalu jalankan perintah di atas. Compose database lokal tidak diperlukan untuk tests.
+
+## Regresi Location di belakang gateway
+
+Product mengembalikan Location berupa path relatif `/api/v1/products/{id}`.
+Klien me-resolve path tersebut terhadap origin request sehingga host, skema, dan
+port publik tetap sesuai pada gateway maupun akses langsung. Format ini sesuai
+[RFC 9110 bagian 10.2.2](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.2).
+`ProductLocationTest` memeriksa tiga origin publik dengan backend tanpa port
+publik, query string, dan header forwarded yang tidak dipercaya.
+`ProductApplicationTests` juga mengikuti Location hasil POST melalui HTTP nyata.
+
+Sebelum perbaikan, tiga kasus regresi gagal karena Location absolut mengikuti
+backend dan menyertakan query request. Setelah perbaikan, seluruh test Product
+berhasil dijalankan dengan PostgreSQL Testcontainers pada 5 November 2026.
