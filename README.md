@@ -30,8 +30,8 @@ Struktur kode dirancang untuk memisahkan model domain, koordinator use case, ser
 | Kategori | Teknologi | Status/dasar |
 |---|---|---|
 | Backend | Java 17, Spring Boot 4.1.2 | Baseline project; parent telah divalidasi |
-| API | REST, JSON, prefix `/api/v1` | Spesifikasi API |
-| Dokumentasi API | OpenAPI 3.0.3, API versi 1.0.0 | Spesifikasi API |
+| API | REST, JSON, URL path versioning `/api/v1` dan `/api/v2` | Spesifikasi API; v2 belum diimplementasikan |
+| Dokumentasi API | OpenAPI 3.0.3, API versi 1.0.0 dan 2.0.0 | Spesifikasi API (DEC-020) |
 | Arsitektur internal | Domain, use case, ports/adapters | Rancangan internal |
 | Database | PostgreSQL 17, database terpisah per service | Pilihan rancangan; runtime belum dikonfirmasi |
 | Persistence | Spring Data JPA/Hibernate dan Flyway | Dependency dan rancangan implementasi |
@@ -46,17 +46,19 @@ Autentikasi JWT, role ADMIN/USER, Kafka, DLQ, shipping, dan notification berada 
 
 Port berikut merupakan konfigurasi **development langsung pada host**, bukan status bahwa prosesnya sudah berjalan.
 
-| Service | Port lokal | Database | Fungsi | Operasi |
-|---|---:|---|---|---:|
-| `product-service` | 8081 | `product_db` | Katalog, harga, stok, pembaruan dan penghapusan produk | 6 |
-| `cart-service` | 8082 | `cart_db` | Membuat/membaca Cart dan mengelola item | 6 |
-| `order-service` | 8083 | `order_db` | Membuat/membaca pesanan dan mengubah atribut yang diizinkan | 3 |
-| `payment-service` | 8084 | `payment_db` | Membuat/membaca permintaan pembayaran dan mengubah metadata yang diizinkan | 3 |
-| **Total** | | | **10 path publik** | **18** |
+| Service | Port lokal | Database | Fungsi | Operasi v1 | Operasi v2 |
+|---|---:|---|---|---:|---:|
+| `product-service` | 8081 | `product_db` | Katalog, harga, stok, pembaruan dan penghapusan produk | 6 | 6 |
+| `cart-service` | 8082 | `cart_db` | Membuat/membaca Cart dan mengelola item | 6 | 7 |
+| `order-service` | 8083 | `order_db` | Membuat/membaca pesanan, mengubah atribut yang diizinkan, dan membatalkan | 3 | 5 |
+| `payment-service` | 8084 | `payment_db` | Membuat/membaca permintaan pembayaran dan mengubah metadata yang diizinkan | 3 | 4 |
+| **Total** | | | **v1: 10 path, v2: 11 path** | **18** | **22** |
 
 Kontrak diperluas dari baseline 17 operasi pada 9 path melalui keputusan OPEN-001: POST `/api/v1/carts` membuat Cart kosong dengan ID dari backend. Penambahan kontrak belum membuktikan endpoint sudah diimplementasikan.
 
-Base URL publik yang direncanakan adalah `http://localhost:8080/api/v1` melalui pintu masuk API. Saat gateway belum berjalan, gunakan port service masing-masing. Dalam Kubernetes, aplikasi dapat memakai port container 8080 pada Pod berbeda.
+Versi 2.0.0 (DEC-020–DEC-023) bersifat backward-compatible: seluruh operasi v1 tetap ada di `/api/v2` dengan arti yang sama, ditambah field opsional/baru dan empat operasi baru, yaitu GET `/orders?customerId=`, GET `/payments?orderId=`, DELETE `/carts/{cartId}/items`, dan POST `/orders/{orderId}/cancel`. GET `/products` mendapat query parameter opsional `name`, `page`, `size`. `/api/v1` tetap didukung. Kontrak v2 belum diimplementasikan.
+
+Base URL publik yang direncanakan adalah `http://localhost:8080/api/v1` dan `http://localhost:8080/api/v2` melalui pintu masuk API. Saat gateway belum berjalan, gunakan port service masing-masing. Dalam Kubernetes, aplikasi dapat memakai port container 8080 pada Pod berbeda.
 
 ## Database per service
 
@@ -113,6 +115,7 @@ ABL-Project/
 │   ├── order-service/
 │   └── payment-service/
 ├── specs/openapi.yaml
+├── specs/openapi-v2.yaml
 ├── docs/
 │   ├── architecture.md
 │   ├── business-rules.md
@@ -242,7 +245,12 @@ URL client antarlayanan juga perlu dikonfigurasi pada consumer; lihat [konfigura
 
 ## Dokumentasi API
 
-Kontrak ada di [specs/openapi.yaml](specs/openapi.yaml). Buka file tersebut pada Swagger Editor/validator yang dipakai tim untuk memeriksa struktur endpoint dan schema.
+| Versi | Prefix | Kontrak | Status |
+|---|---|---|---|
+| 1.0.0 | `/api/v1` | [specs/openapi.yaml](specs/openapi.yaml) | Diimplementasikan; dibekukan dan tetap didukung |
+| 2.0.0 | `/api/v2` | [specs/openapi-v2.yaml](specs/openapi-v2.yaml) | Kontrak ditulis; belum diimplementasikan |
+
+Buka file tersebut pada Swagger Editor/validator yang dipakai tim untuk memeriksa struktur endpoint dan schema. Ringkasan perubahan 1.0.0 → 2.0.0 ada pada `info.description` kontrak v2 dan [DEC-020–DEC-023](docs/decisions.md#dec-020-api-versi-200-dengan-url-path-versioning).
 
 Swagger UI di masing-masing aplikasi belum dikonfirmasi terpasang. URL `/swagger-ui.html` tidak diasumsikan tersedia. Kontrak statis ini sudah dapat dipakai sebagai acuan implementasi dan pengujian.
 
@@ -427,7 +435,7 @@ Setelah datasource/profile pengujian siap:
 ./mvnw verify
 ```
 
-Keberhasilan command dengan nol tests tidak membuktikan fitur telah diuji. Integration tests hanya dijalankan otomatis jika lifecycle/plugin-nya dikonfigurasi. Lihat [testing.md](docs/testing.md) untuk matriks 18 operasi dan pencatatan hasil.
+Keberhasilan command dengan nol tests tidak membuktikan fitur telah diuji. Integration tests hanya dijalankan otomatis jika lifecycle/plugin-nya dikonfigurasi. Lihat [testing.md](docs/testing.md) untuk matriks 18 operasi v1, tambahan v2, dan pencatatan hasil.
 
 Bukti demo yang dapat dikumpulkan setelah implementasi tersedia:
 

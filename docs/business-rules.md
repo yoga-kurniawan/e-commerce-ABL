@@ -1,6 +1,6 @@
 # Aturan bisnis dan batas kontrak
 
-[Kembali ke README](../README.md) · [Keputusan terbuka](decisions.md) · [OpenAPI](../specs/openapi.yaml)
+[Kembali ke README](../README.md) · [Keputusan terbuka](decisions.md) · [OpenAPI v1](../specs/openapi.yaml) · [OpenAPI v2](../specs/openapi-v2.yaml)
 
 ## 1. Cara membaca dokumen
 
@@ -12,6 +12,8 @@ Schema sumber dan narasi tidak selalu merinci hal yang sama. Dokumen ini menunju
 
 Semua endpoint pada tabel memakai prefix `/api/v1`. Versi API 1.0.0 dan OpenAPI 3.0.3 berasal dari laporan h. 8 dan 16. Kontrak project diperluas menjadi 18 operasi pada 10 path melalui keputusan OPEN-001; baseline laporan memuat 17 operasi pada 9 path.
 
+Versi 2.0.0 (DEC-020) memakai prefix `/api/v2` dan bersifat backward-compatible: semua operasi v1 tetap sama, ditambah field opsional/baru serta operasi baru, sehingga totalnya 22 operasi pada 11 path. Baris bertanda **v2** pada tabel di bawah hanya berlaku pada `/api/v2`; respons v1 tidak memuat field baru. Kontrak v2 belum diimplementasikan.
+
 ## 2. Product Service
 
 | Method | Path | Input utama | Sukses | Error yang dicantumkan |
@@ -22,6 +24,7 @@ Semua endpoint pada tabel memakai prefix `/api/v1`. Versi API 1.0.0 dan OpenAPI 
 | PUT | `/products/{productId}` | name, price, stock lengkap | 200, Product | 400, 404 |
 | PATCH | `/products/{productId}` | Sebagian name/price/stock | 200, Product | 400, 404 |
 | DELETE | `/products/{productId}` | productId integer | 204 tanpa body | 404, 409 |
+| GET **v2** | `/products?name=&page=&size=` | Semua opsional | 200, array Product + header X-Total-Count | 400, 500 |
 
 Ketentuan sumber, h. 12, 21–22, 28–31, 38–40:
 
@@ -35,6 +38,8 @@ Keputusan project DEC-011: DELETE memakai soft delete (`active=false`). GET/list
 
 PATCH kosong ditolak. Null eksplisit pada name/price/stock ditolak karena atribut wajib domain dan schema tidak menyatakan nullable; field yang tidak dikirim tetap dipertahankan.
 
+**v2 (DEC-021):** `description` opsional, nullable, maksimal 1000 karakter. PATCH null menghapus deskripsi. PUT v2 tanpa description mengosongkannya, sedangkan PUT v1 mempertahankan description tersimpan. **v2 (DEC-022):** GET `/products` tanpa parameter sama dengan v1; `name` filter contains case-insensitive; paginasi aktif hanya bila page/size dikirim (default 0/20, maksimal 100), respons tetap array.
+
 Belum dirinci: nama kosong/panjang nama, presisi/skala mata uang, pembulatan, dan optimistic locking. Jangan menganggap schema asal sudah memiliki `minLength`, `maxLength`, atau `additionalProperties: false`.
 
 ## 3. Cart Service
@@ -43,10 +48,11 @@ Belum dirinci: nama kosong/panjang nama, presisi/skala mata uang, pembulatan, da
 |---|---|---|---|---|
 | POST | `/carts` | customerId wajib; rancangan kontrak awal OPEN-001 | 201, Cart kosong dengan ID backend | 400 |
 | GET | `/carts/{cartId}` | cartId integer | 200, Cart | 404 |
-| POST | `/carts/{cartId}/items` | productId, quantity | 201, Cart pada YAML | 400, 404 |
-| PUT | `/carts/{cartId}/items/{productId}` | quantity wajib | 200, contoh item diperbarui | 400, 404, 409 |
-| PATCH | `/carts/{cartId}/items/{productId}` | quantity | 200, contoh item diperbarui | 400, 404, 409 |
+| POST | `/carts/{cartId}/items` | productId, quantity | 201, Cart | 400, 404, 409, 503 |
+| PUT | `/carts/{cartId}/items/{productId}` | quantity wajib | 200, UpdatedCartItem | 400, 404, 409, 503 |
+| PATCH | `/carts/{cartId}/items/{productId}` | quantity | 200, UpdatedCartItem | 400, 404, 409, 503 |
 | DELETE | `/carts/{cartId}/items/{productId}` | Identifier Cart dan Product | 204 tanpa body | 404 |
+| DELETE **v2** | `/carts/{cartId}/items` | cartId integer | 204 tanpa body, Cart tetap ada | 404 |
 
 Ketentuan sumber, h. 13–14, 22–23, 31–34, 40–42:
 
@@ -57,7 +63,7 @@ Ketentuan sumber, h. 13–14, 22–23, 31–34, 40–42:
 - Jumlah yang melebihi stok/kondisi keranjang yang tidak mengizinkan perubahan ditunjukkan sebagai konflik pada operasi update.
 - DELETE menghapus item tertentu, bukan seluruh Cart.
 
-Contoh naratif respons update item memuat cartId, productId, quantity, dan subtotal. YAML tambahannya baru menuliskan deskripsi response 200, belum schema/content lengkap.
+Contoh naratif respons update item memuat cartId, productId, quantity, dan subtotal. YAML laporan baru menuliskan deskripsi response 200; kontrak v2 mendokumentasikan schema `UpdatedCartItem` sesuai implementasi, serta 404 (Cart/item/produk tidak ada), 409 (stok), dan 503 (Product tidak dapat dihubungi) pada POST/PUT/PATCH item sebagai koreksi dokumentasi (DEC-020). Implementasi v1 sudah berperilaku demikian, tetapi kontrak 1.0.0 tidak diubah; tabel di atas mengikuti implementasi.
 
 Keputusan project pada 29 Oktober 2026:
 
@@ -65,7 +71,7 @@ Keputusan project pada 29 Oktober 2026:
 - **OPEN-002 A:** POST produk yang sudah ada menambah quantity pada item yang sama; validasi stok memakai quantity akhir. POST item tetap membutuhkan Cart yang sudah ada.
 - **OPEN-003 B:** harga satuan disimpan dari backend Product saat produk masuk Cart dan digunakan saat checkout. Perubahan harga katalog tidak otomatis mengganti harga item yang tersimpan.
 
-Belum diputuskan: satu/beberapa Cart aktif per customer, bukti kepemilikan Cart, masa berlaku Cart/harga, aturan harga saat produk ditambahkan ulang setelah perubahan harga, serta kapan stok benar-benar dipesan. Penyimpanan harga satuan diperlukan; cara mengekspos harga tersebut kepada Order masih perlu diputuskan.
+Belum diputuskan: satu/beberapa Cart aktif per customer, bukti kepemilikan Cart, masa berlaku Cart/harga, aturan harga saat produk ditambahkan ulang setelah perubahan harga, serta kapan stok benar-benar dipesan. Penyimpanan harga satuan sudah diterapkan. **v2 (DEC-021):** item Cart dan UpdatedCartItem menampilkan `unitPrice`; Order tetap membaca Cart v1. **v2 (DEC-022):** DELETE `/carts/{cartId}/items` dipakai pelanggan untuk membersihkan seluruh item sekaligus (idempotent). Ini bukan bagian checkout; penghapusan item setelah checkout belum diputuskan (DEC-012).
 
 ## 4. Order Service
 
@@ -74,6 +80,8 @@ Belum diputuskan: satu/beberapa Cart aktif per customer, bukti kepemilikan Cart,
 | POST | `/orders` | cartId, customerId | 201, Order | 400 |
 | GET | `/orders/{orderId}` | orderId integer | 200, Order | 404 |
 | PATCH | `/orders/{orderId}` | Contoh atribut: shippingAddress | 200, contoh Order diperbarui | 400, 404, 409 |
+| GET **v2** | `/orders?customerId=` | customerId wajib | 200, array Order (terbaru dulu) | 400 |
+| POST **v2** | `/orders/{orderId}/cancel` | Tanpa body | 200, Order CANCELLED | 404, 409, 503 |
 
 Ketentuan sumber, h. 14–15, 23, 27–28, 34–35, 43:
 
@@ -82,13 +90,15 @@ Ketentuan sumber, h. 14–15, 23, 27–28, 34–35, 43:
 - Enum schema status: PENDING, CONFIRMED, CANCELLED. Enum tidak mendefinisikan seluruh transisi antarstatus.
 - PATCH dibatasi pada atribut yang diizinkan. Contoh laporan adalah perubahan alamat sebelum pesanan diproses.
 - Total dan status pembayaran tidak boleh diubah bebas melalui PATCH ini.
-- PUT dan DELETE Order tidak disediakan pada rancangan awal.
+- PUT dan DELETE Order tidak disediakan pada rancangan awal. v2 juga tidak menambahkannya; pembatalan memakai POST `/cancel` agar data tetap tersimpan.
 
 Keputusan project DEC-012 (menunggu review): harga satuan Order diturunkan dari subtotal/quantity Cart; nama produk dan stok dibaca dari Product saat checkout. Cart tidak ada 404; Cart kosong, customerId berbeda, produk tidak tersedia, atau stok kurang 409; dependency gagal 503. PATCH alamat hanya saat PENDING (selain itu 409), dan shippingAddress ditambahkan pada respons Order sebagai nullable.
 
 Harga checkout mengikuti harga tersimpan pada Cart (OPEN-003 B), bukan harga katalog terbaru. Belum diputuskan: status persis yang boleh mengubah alamat, Cart kosong, validasi kepemilikan customer, masa berlaku harga, pembekuan Cart, snapshot internal, stock reservation, dan penanganan request create berulang. Policy hanya-PENDING adalah usulan yang perlu disepakati, bukan ketentuan eksplisit laporan.
 
-Rancangan APS V3 mengusulkan snapshot item/harga di Order dan lookup Product untuk field yang tidak tersedia lengkap pada Cart. Jangan menganggap usulan model internal ini sudah menjadi schema respons publik.
+Rancangan APS V3 mengusulkan snapshot item/harga di Order dan lookup Product untuk field yang tidak tersedia lengkap pada Cart. Pada v1 snapshot tetap internal; **v2 (DEC-021)** menampilkan `items` (productId, productName, quantity, unitPrice, subtotal) pada respons Order.
+
+**v2 (DEC-023) pembatalan:** PENDING tanpa Payment PENDING/SUCCESS menjadi CANCELLED (200); Order yang sudah CANCELLED dikembalikan apa adanya (200, idempotent); CONFIRMED, masih ada Payment PENDING, atau sudah ada Payment SUCCESS ditolak 409; Payment Service gagal 503 tanpa perubahan. Pembatalan tidak mengembalikan stok (belum direservasi) dan tidak mengosongkan Cart. Setelah CANCELLED, create Payment ditolak ORDER_NOT_PAYABLE dan PATCH alamat ditolak 409. Race dengan create Payment bersamaan belum dimitigasi.
 
 ## 5. Payment Service
 
@@ -97,8 +107,9 @@ Rancangan APS V3 mengusulkan snapshot item/harga di Order dan lookup Product unt
 | POST | `/payments` | orderId, method; header Idempotency-Key wajib | 201, Payment / replay hasil awal | 400, 404, 409, 500, 502, 503, 504 |
 | GET | `/payments/{paymentId}` | paymentId integer | 200, Payment | 400, 404, 500, 503 |
 | PATCH | `/payments/{paymentId}` | transactionReference | 200, Payment | 400, 404, 409, 500, 503 |
+| GET **v2** | `/payments?orderId=` | orderId wajib | 200, array Payment (urut attempt) | 400, 500, 503 |
 
-Perluasan teknis tabel di atas mengikuti DEC-018 dan [desain tahap 0](payment-service-technical-design.md), bukan klaim bahwa semua respons telah diimplementasikan. Simulator mempunyai [kontrak development/test terpisah](../specs/payment-simulator.openapi.yaml); 18 operasi publik tetap pada specs/openapi.yaml.
+Perluasan teknis tabel di atas mengikuti DEC-018 dan [desain tahap 0](payment-service-technical-design.md), bukan klaim bahwa semua respons telah diimplementasikan. Simulator mempunyai [kontrak development/test terpisah](../specs/payment-simulator.openapi.yaml); 18 operasi publik v1 ada pada specs/openapi.yaml dan 22 operasi v2 pada specs/openapi-v2.yaml.
 
 Ketentuan sumber, h. 15–16, 23–24, 27–28, 36–37, 43–44:
 
@@ -108,7 +119,7 @@ Ketentuan sumber, h. 15–16, 23–24, 27–28, 36–37, 43–44:
 - Enum schema status: PENDING, SUCCESS, FAILED; transisi dan integrasi provider belum dirinci.
 - PATCH dibatasi pada atribut yang diizinkan; contoh laporan memakai transactionReference.
 - Client tidak boleh bebas menetapkan SUCCESS/FAILED. Status final semestinya berasal dari verifikasi provider atau mekanisme backend yang dipercaya.
-- PUT dan DELETE Payment tidak disediakan pada rancangan awal.
+- PUT dan DELETE Payment tidak disediakan pada rancangan awal maupun v2.
 
 Keputusan pengguna (DEC-012): amount diperoleh backend dari `Order.total`, yaitu total akhir yang telah memperhitungkan biaya/potongan jika fiturnya tersedia. Payment tidak menghitung ulang ongkir atau menambahkan biaya sendiri. Versi saat ini belum menyediakan perincian biaya tambahan; tanpa biaya/potongan, total sama dengan subtotal item. Status awal Payment adalah `PENDING`, termasuk COD. Representasi uang memakai BigDecimal/NUMERIC tanpa pembulatan diam-diam agar nilai sama dengan total Order.
 
@@ -131,7 +142,7 @@ Simulator mengizinkan PENDING ke SUCCESS/FAILED. Hasil final yang sama tidak mem
 | Endpoint membuat Cart tidak ada pada baseline laporan | Daftar h. 11 dan 27 | OPEN-001 B diterima: kontrak project menambahkan POST `/carts`; implementasi dan tests belum tersedia |
 | shippingAddress tampil pada contoh PATCH, belum ada di schema Order awal | h. 23, 35, 43 | Selaraskan schema bila field dikembalikan sebagai kontrak terdokumentasi |
 | transactionReference tampil pada contoh PATCH, belum ada di schema Payment awal | h. 24, 36, 44 | Selaraskan schema bila field dikembalikan |
-| Response 200 tambahan Cart/Order/Payment belum memiliki content/schema | YAML h. 41–44 | Gunakan narasi sebagai bahan pembahasan; lengkapi kontrak melalui keputusan eksplisit |
+| Response 200 tambahan Cart/Order/Payment belum memiliki content/schema | YAML h. 41–44 | Payment/Order sudah memakai schema; update item Cart didokumentasikan sebagai UpdatedCartItem pada kontrak v2 (DEC-020) |
 | PATCH memakai minProperties tetapi tidak membatasi additionalProperties | YAML h. 39–44 | Tentukan whitelist/penolakan field asing dan dokumentasikan pengetatan |
 | Null/presence, panjang string, dan beberapa status gagal belum lengkap | Schema sumber | Tentukan aturan sebelum menulis DTO, handler, dan tests final |
 | Cara menyelesaikan pembayaran/stok lintas layanan belum dirinci | Lingkup keseluruhan laporan | Susun workflow lanjutan sebelum mengklaim checkout final |

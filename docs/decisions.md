@@ -6,15 +6,15 @@
 
 Status **ditetapkan laporan** berarti ada dasar eksplisit pada dokumen sumber. **Dipilih untuk project** berarti pilihan teknis dalam pembahasan, bukan isi literal laporan. **Usulan/belum diputuskan** belum boleh diperlakukan sebagai aturan implementasi final.
 
-Penerapan suatu keputusan juga berbeda dari status operasional: memilih PostgreSQL belum membuktikan database sudah berjalan. Catatan awal ini disusun dari laporan dan progres yang dikonfirmasi sampai 29 Oktober 2026.
+Penerapan suatu keputusan juga berbeda dari status operasional: memilih PostgreSQL belum membuktikan database sudah berjalan. Catatan awal ini disusun dari laporan dan progres yang dikonfirmasi sampai 29 Oktober 2026; DEC-020–DEC-023 ditambahkan pada 12 November 2026.
 
 ## 2. Baseline yang sudah memiliki dasar
 
 | ID | Keputusan | Status dan dasar | Konsekuensi |
 |---|---|---|---|
 | DEC-001 | Empat layanan: Product, Cart, Order, Payment | Ditetapkan laporan h. 6–7 | Batas tanggung jawab dan API mengikuti empat layanan |
-| DEC-002 | REST/JSON, OpenAPI 3.0.3, API 1.0.0 | Ditetapkan laporan h. 8/16 | Request/response dan dokumentasi mengikuti kontrak |
-| DEC-003 | Baseline sumber 17 operasi pada 9 path; kontrak project diperluas menjadi 18 operasi pada 10 path | Baseline laporan, diperluas melalui OPEN-001 pilihan B pada 29 Oktober 2026 | Tambahkan POST `/carts` pada prefix `/api/v1`; perluasan berikutnya memerlukan keputusan baru |
+| DEC-002 | REST/JSON, OpenAPI 3.0.3, API 1.0.0 | Ditetapkan laporan h. 8/16; versi 2.0.0 ditambahkan melalui DEC-020 | Request/response dan dokumentasi mengikuti kontrak; v1 tetap berlaku di samping v2 |
+| DEC-003 | Baseline sumber 17 operasi pada 9 path; kontrak project diperluas menjadi 18 operasi pada 10 path | Baseline laporan, diperluas melalui OPEN-001 pilihan B pada 29 Oktober 2026 | Tambahkan POST `/carts` pada prefix `/api/v1`; perluasan berikutnya memerlukan keputusan baru. Kontrak v2 (DEC-020–DEC-023) memuat 22 operasi pada 11 path |
 | DEC-004 | Java 17 dan Spring Boot 4.1.2 | Dipilih untuk project; parent/module telah lolos validate | Versi build dipusatkan pada parent POM |
 | DEC-005 | Maven multi-module dengan Wrapper | Dipilih untuk project dan dikonfirmasi lewat validate | Empat module tetap menghasilkan aplikasi/JAR terpisah |
 | DEC-006 | Struktur APS V3: domain/usecase/adapter | Dipilih sebagai adaptasi materi APS dan gambar referensi | Domain terpisah dari JPA; use case bergantung pada port |
@@ -38,7 +38,7 @@ Penerapan suatu keputusan juga berbeda dari status operasional: memilih PostgreS
 | OPEN-009 | Bagaimana idempotency create Order/Payment? | Pengguna menerima penggunaan idempotency untuk create Payment; lihat DEC-013 | Payment: prinsip diterima, detail key/replay/concurrency belum diputuskan; Order tetap terbuka | Lengkapi kontrak dan persistence sebelum mengklaim request berulang aman |
 | OPEN-010 | Bagaimana identitas/kepemilikan customer dibuktikan? | Input customerId belum mendefinisikan autentikasi | Fixture lokal atau rancangan auth/otorisasi | ID client tidak dapat dianggap identitas terverifikasi |
 | OPEN-011 | Presisi uang, pembulatan, panjang nama, dan batas ID? | Schema belum mengatur semua detail | BigDecimal/NUMERIC dan aturan skala yang disepakati | DTO, SQL, dan total dapat tidak selaras |
-| OPEN-012 | Apakah snapshot item disimpan pada Order? | Diusulkan APS V3; schema internal belum diberikan laporan | Diterapkan pada DEC-012: `order_items` menyimpan productId, nama, quantity, dan harga satuan Cart | Item bersifat internal; belum diekspos pada respons publik |
+| OPEN-012 | Apakah snapshot item disimpan pada Order? | Diusulkan APS V3; schema internal belum diberikan laporan | Diterapkan pada DEC-012: `order_items` menyimpan productId, nama, quantity, dan harga satuan Cart | v1 tidak mengekspos item; v2 menampilkan `items` pada respons Order (DEC-021) |
 
 Baris berstatus diterima merupakan keputusan pengguna untuk project, bukan bukti persetujuan seluruh tim atau implementasi selesai. Opsi pada baris lainnya belum disetujui. ID OPEN dipertahankan agar referensi tetap dapat ditelusuri. Rincian keputusan yang diterima dicatat di bawah.
 
@@ -78,7 +78,7 @@ Baris berstatus diterima merupakan keputusan pengguna untuk project, bukan bukti
 - **Tests yang diperlukan:** perubahan harga katalog setelah penambahan item tidak mengubah harga checkout item yang tersimpan; perhitungan subtotal/total konsisten; Order menggunakan harga Cart. Tests masa berlaku dan penambahan ulang dilengkapi setelah aturannya dipilih.
 - **Keputusan yang digantikan:** tidak ada; menyelesaikan pilihan utama OPEN-003 dengan detail lanjutan yang masih terbuka.
 
-README, business-rules, architecture, testing, dan OpenAPI diperbarui untuk mencerminkan keputusan utama OPEN-001/OPEN-002/OPEN-003. Perubahan schema respons Cart untuk membawa harga satuan ke Order masih menunggu keputusan lanjutan; penambahan customerId pada kontrak create Cart tidak menyelesaikan kebutuhan tersebut.
+README, business-rules, architecture, testing, dan OpenAPI diperbarui untuk mencerminkan keputusan utama OPEN-001/OPEN-002/OPEN-003. Perubahan schema respons Cart untuk membawa harga satuan ke Order masih menunggu keputusan lanjutan; penambahan customerId pada kontrak create Cart tidak menyelesaikan kebutuhan tersebut. Pembaruan: v2 menambahkan `unitPrice` pada item Cart (DEC-021); Order v1 tetap menurunkan harga dari subtotal/quantity.
 
 ## 4. Perbaikan kontrak yang perlu ditinjau
 
@@ -86,9 +86,9 @@ README, business-rules, architecture, testing, dan OpenAPI diperbarui untuk menc
 |---|---|---|---|
 | API-001 | shippingAddress hanya terlihat pada contoh/PATCH, belum pada schema Order awal | Tambahkan atribut response bila menjadi kontrak yang diimplementasikan | Diterapkan pada DEC-012 (nullable), menunggu review |
 | API-002 | transactionReference belum pada schema Payment awal | Tambahkan atribut respons opsional sesuai DEC-015 | Diterima dan dicatat pada kontrak; implementasi belum ada |
-| API-003 | Response 200 tambahan Cart/Order/Payment hanya description pada YAML | PATCH Payment mengembalikan schema Payment | Payment diselesaikan pada kontrak; Cart/Order masih terbuka |
+| API-003 | Response 200 tambahan Cart/Order/Payment hanya description pada YAML | PATCH Payment mengembalikan schema Payment; PUT/PATCH item Cart mengembalikan UpdatedCartItem | Payment dan Order diselesaikan; Cart didokumentasikan sesuai implementasi pada kontrak v2 sebagai koreksi, kontrak v1 tidak diubah (DEC-020) |
 | API-004 | PATCH tidak menetapkan additionalProperties false | PATCH Payment menolak field asing, null, dan reference kosong | Payment diselesaikan pada kontrak melalui DEC-015; kebijakan global/layanan lain masih terbuka |
-| API-005 | Beberapa error workflow/dependency belum dicantumkan per operasi | Tambahkan status/body setelah memilih pemetaan error | Belum diputuskan |
+| API-005 | Beberapa error workflow/dependency belum dicantumkan per operasi | Tambahkan status/body setelah memilih pemetaan error | Pada kontrak v2, operasi item Cart dilengkapi 404/409/503 sesuai implementasi dan daftar kode error dicatat (DEC-020); kontrak v1 tidak diubah |
 
 Jangan menganggap response tanpa `content` di schema harus tanpa body. Narasi memberi contoh body pada beberapa operasi tambahan. Sebaliknya, DELETE 204 secara eksplisit tidak memiliki body.
 
@@ -128,6 +128,7 @@ Jangan menganggap response tanpa `content` di schema harus tanpa body. Narasi me
 - Respons Order menambahkan shippingAddress (nullable). Respons PATCH 200 memakai schema Order.
 - Lookup HTTP dilakukan di luar transaksi database; Order dan item disimpan dalam satu transaksi lokal.
 - Belum diputuskan: pengosongan/penguncian Cart setelah checkout, idempotency create Order (OPEN-009), transisi PENDING ke CONFIRMED/CANCELLED, dan optimistic locking.
+- Pembaruan v2: transisi PENDING ke CANCELLED ditetapkan pada DEC-023. Penghapusan item Cart setelah checkout tetap belum diputuskan; DELETE `/carts/{cartId}/items` pada DEC-022 adalah fitur pembersihan oleh pelanggan, bukan bagian checkout.
 
 ## DEC-013: Amount dan status awal Payment
 
@@ -220,6 +221,63 @@ Jangan menganggap response tanpa `content` di schema harus tanpa body. Narasi me
 - Kontrak publik Payment dilengkapi 400/404/409/500/502/503/504 sesuai operasi. Simulator memakai kontrak terpisah `specs/payment-simulator.openapi.yaml`, POST `/internal/dev/payments/{paymentId}/result`, hasil SUCCESS/FAILED, dan 200 Payment/no-op terminal identik.
 - Simulator membutuhkan profil local/test, flag enable eksplisit, listener loopback, serta secret environment dengan header X-Simulator-Token. Profil prod menonaktifkan simulator sekalipun flag/profil lain aktif. Startup memvalidasi token minimal 32 karakter dan binding. Helper/config deployment belum diubah.
 - Rincian yang sebelumnya disebut akan ditetapkan saat implementasi pada DEC-014–DEC-017 mengikuti dokumen desain tahap 0 ini. Implementasi selanjutnya tetap harus membuktikan atomicity, recovery, batas akses, dan kompatibilitas mapping melalui tests.
+
+## DEC-020: API versi 2.0.0 dengan URL path versioning
+
+- Status: diterima oleh pengguna pada 12 November 2026; kontrak ditulis pada `specs/openapi-v2.yaml`, belum diimplementasikan atau diuji.
+- Masalah: tugas meminta dokumentasi dan spesifikasi API versi 2.0 dengan perubahan backward-compatible. Kontrak 1.0.0 juga belum sepenuhnya sesuai implementasi (schema respons update item Cart, status error operasi item Cart).
+- Pilihan yang dipertimbangkan: menaikkan `info.version` saja pada path yang sama; header/media type versioning; URL path versioning. Pengguna memilih URL path versioning.
+- Keputusan:
+  - v2 tersedia pada prefix `/api/v2` dengan `info.version: 2.0.0`, tetap OpenAPI 3.0.3. `/api/v1` tetap berjalan dan kontraknya (`specs/openapi.yaml`) tidak berubah perilakunya.
+  - v2 adalah perubahan backward-compatible: seluruh 18 operasi v1 tersedia di v2 dengan request, status code, dan arti yang sama. Perubahan hanya berupa field request opsional, field respons baru, query parameter opsional, dan operasi baru. Tidak ada field yang dihapus, diganti nama, diubah tipenya, atau menjadi wajib.
+  - Respons v1 tidak memuat field baru v2 agar kontrak v1 benar-benar tetap.
+  - Kontrak v2 memuat 22 operasi pada 11 path: 18 operasi v1 ditambah 4 operasi baru (DEC-022, DEC-023), serta perluasan query parameter GET `/products`.
+  - Panggilan antarlayanan yang sudah ada (Cart → Product, Order → Cart/Product, Payment → Order) tetap memakai v1. Pengecualian: pembatalan Order memanggil GET `/api/v2/payments?orderId=` karena operasi itu hanya ada di v2 (DEC-023).
+  - Scope Idempotency-Key create Payment tetap `CREATE_PAYMENT_V1` untuk v1 dan v2 karena operasinya sama.
+  - Simulator pembayaran tetap pada kontrak terpisah tanpa versi.
+  - `specs/openapi.yaml` (1.0.0) dibekukan apa adanya sebagai deliverable v1. Seluruh pembaruan hanya ditulis pada `specs/openapi-v2.yaml`, dengan changelog di `info.description` yang dibagi menjadi Ditambahkan, Diubah, dan Koreksi dokumentasi, serta penanda `[Baru v2]`, `[Diubah v2]`, `[Koreksi v2]` pada operasi/field.
+  - Koreksi dokumentasi mencatat perilaku yang sudah ada pada implementasi v1 tetapi belum tercantum di 1.0.0: schema `UpdatedCartItem` untuk PUT/PATCH item Cart, 404/409/503 pada POST/PUT/PATCH item Cart, header Location pada 201, dan daftar kode error. Perilaku v1 tidak berubah; kontrak 1.0.0 saja yang kurang lengkap pada bagian tersebut.
+- Dampak kode (tahap berikutnya): controller v2 untuk keempat service, mapper output terpisah v1/v2, migrasi Flyway Product untuk kolom `description`, dan konfigurasi gateway untuk `/api/v2`.
+- Risiko/trade-off: dua versi harus dipelihara bersamaan; perubahan domain harus menjaga respons v1. Jadwal deprecation/sunset v1 belum ditetapkan.
+- Tests yang diperlukan: contract test v1 memastikan respons tidak memuat field v2 dan status code tetap; seluruh 18 operasi lulus pada `/api/v2`; operasi baru diuji sesuai DEC-022/DEC-023.
+- Keputusan yang digantikan: tidak ada; memperluas DEC-002 dan DEC-003.
+
+## DEC-021: Field baru pada v2
+
+- Status: diterima oleh pengguna pada 12 November 2026; kontrak v2 ditulis, belum diimplementasikan atau diuji.
+- **Product `description`:** string opsional, nullable, maksimal 1000 karakter, pada POST/PUT input, PATCH, dan respons v2. Tidak dikirim atau null berarti tanpa deskripsi. PATCH dengan null eksplisit menghapus deskripsi, berbeda dari name/price/stock yang menolak null.
+  - PUT v2 tanpa description mengosongkan deskripsi (PUT sebagai pengganti penuh).
+  - PUT v1 mempertahankan description tersimpan karena client v1 tidak mengenal field tersebut; tanpa aturan ini client v1 dapat menghapus data yang diisi lewat v2.
+  - Dampak database: migrasi Flyway baru menambahkan kolom nullable pada `products`; produk lama bernilai null.
+- **Cart `unitPrice`:** respons item Cart dan `UpdatedCartItem` v2 menampilkan harga satuan tersimpan (OPEN-003 B). Nilai sudah disimpan oleh domain Cart, sehingga tidak ada perubahan database. Order tetap membaca Cart v1 dan menurunkan harga dari subtotal/quantity sampai ada keputusan mengganti sumbernya.
+- **Order `items`:** respons Order v2 menampilkan snapshot item (`productId`, `productName`, `quantity`, `unitPrice`, `subtotal`) dari `order_items` (OPEN-012). Tidak ada perubahan database.
+- Tests yang diperlukan: create/PUT/PATCH description termasuk null dan batas panjang; PUT v1 tidak menghapus description; respons v1 tanpa field baru; unitPrice × quantity = subtotal; items Order sesuai snapshot dan total.
+
+## DEC-022: Operasi baca dan pengosongan baru pada v2
+
+- Status: diterima oleh pengguna pada 12 November 2026; kontrak v2 ditulis, belum diimplementasikan atau diuji.
+- **GET `/products` dengan `name`, `page`, `size` opsional:** tanpa parameter, perilaku sama dengan v1 (seluruh produk aktif). `name` adalah filter contains tanpa membedakan huruf besar/kecil. Paginasi hanya aktif jika page atau size dikirim (default page 0, size 20, maksimal 100). Respons tetap array agar bentuknya kompatibel; jumlah total dikirim lewat header `X-Total-Count`. Urutan berdasarkan id menaik.
+- **GET `/orders?customerId=`:** riwayat pesanan pelanggan, urutan id menurun. customerId wajib; tanpa pesanan menghasilkan array kosong. Ini filter referensi, bukan otorisasi (OPEN-010). Paginasi belum disediakan.
+- **GET `/payments?orderId=`:** riwayat attempt Payment sebuah Order (DEC-015), urutan id menaik. orderId wajib; tanpa Payment menghasilkan array kosong. Tidak memanggil Order Service.
+- **DELETE `/carts/{cartId}/items`:** pelanggan membersihkan seluruh item sekaligus, misalnya karena isinya sudah terlalu banyak atau tidak lagi diminati, tanpa menghapus satu per satu. Bukan bagian alur checkout. Cart tetap ada. Idempotent (Cart kosong tetap 204); Cart tidak ada 404. Tidak mengubah DEC-012: Cart tidak dikosongkan otomatis saat checkout.
+- Alasan: v1 tidak memiliki cara melihat daftar Order/Payment, sedangkan dashboard dan pembatalan Order membutuhkan riwayat Payment.
+- Tests yang diperlukan: kombinasi filter/paginasi dan header total; array kosong; validasi query parameter wajib (400); urutan hasil; pengosongan Cart dan idempotensinya.
+
+## DEC-023: Pembatalan Order melalui POST `/orders/{orderId}/cancel`
+
+- Status: diterima oleh pengguna pada 12 November 2026; kontrak v2 ditulis, belum diimplementasikan atau diuji. Menyelesaikan sebagian transisi status yang terbuka pada DEC-012.
+- Pilihan yang dipertimbangkan: PATCH `{"status":"CANCELLED"}`, DELETE `/orders/{orderId}`, atau POST endpoint aksi. Pengguna memilih POST `/cancel`: pembatalan adalah transisi status dengan aturan bisnis, data tetap tersimpan (bukan DELETE), dan client tidak dapat menetapkan status lain (bukan PATCH status).
+- Aturan:
+  - PENDING tanpa Payment PENDING/SUCCESS → 200, status CANCELLED.
+  - Sudah CANCELLED → 200 dengan Order apa adanya (idempotent).
+  - CONFIRMED → 409; pembatalan setelah pembayaran memerlukan workflow refund (DEC-015).
+  - Masih memiliki Payment PENDING → 409 (dipilih pengguna). Payment SUCCESS → 409.
+  - Order tidak ada → 404. Payment Service tidak dapat dihubungi atau responsnya tidak valid → 503 tanpa perubahan status.
+- Order Service memeriksa Payment melalui GET `/api/v2/payments?orderId=` (DEC-022). Ini menambah dependency Order → Payment, sementara Payment → Order sudah ada; tidak ada panggilan sinkron yang berputar dalam satu request, tetapi kedua service saling bergantung saat runtime.
+- Setelah CANCELLED, create Payment baru ditolak 409 ORDER_NOT_PAYABLE (DEC-015). PATCH alamat ditolak 409 (DEC-012).
+- Tidak mengembalikan stok karena stok belum direservasi (OPEN-004) dan tidak mengosongkan Cart.
+- Risiko: race condition saat Payment dibuat bersamaan dengan pembatalan (Payment membaca Order masih PENDING, lalu Order dibatalkan sebelum Payment tersimpan) dapat menghasilkan Payment PENDING pada Order CANCELLED. Mitigasi (locking/verifikasi ulang/rekonsiliasi) belum diputuskan. Pembatalan otomatis karena batas waktu juga belum termasuk.
+- Tests yang diperlukan: PENDING → CANCELLED; idempotent cancel; 409 untuk CONFIRMED, Payment PENDING, dan Payment SUCCESS; 404; 503 saat stub Payment gagal tanpa perubahan status; create Payment setelah cancel ditolak.
 
 ## 6. Template keputusan berikutnya
 

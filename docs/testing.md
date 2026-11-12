@@ -36,6 +36,7 @@ Sebelum menguji server:
 3. Pastikan path parameter sesuai nama pada URL dan required.
 4. Bandingkan request/response dengan contoh dan schema laporan.
 5. Catat ketidaklengkapan sumber sebagai issue; jangan mengubah kontrak tanpa keputusan.
+6. Untuk [OpenAPI v2](../specs/openapi-v2.yaml), pastikan 11 path memuat 22 operasi dan seluruh operasi v1 tetap ada dengan request/status code yang sama (DEC-020).
 
 Schema asli tidak menetapkan seluruh whitelist, panjang string, null semantics, dan respons tambahan. Rencana tests untuk aturan baru harus menyebut keputusan yang menjadi dasarnya.
 
@@ -63,6 +64,23 @@ Semua path memiliki prefix `/api/v1`. Setiap baris adalah target pengujian setel
 | B-01 | POST `/payments` | Order dan method valid membuat permintaan pembayaran | 201 |
 | B-02 | GET `/payments/{paymentId}` | Payment fixture ditemukan | 200 |
 | B-03 | PATCH `/payments/{paymentId}` | Reference diperbarui pada keadaan yang diizinkan | 200 |
+
+### 4.1 Tambahan v2 (`/api/v2`)
+
+Seluruh baris di atas juga diuji pada prefix `/api/v2`. Baris berikut adalah target tambahan setelah v2 diimplementasikan.
+
+| ID | Method dan path | Skenario | Respons |
+|---|---|---|---|
+| V2-01 | POST/PUT/PATCH `/products` | description opsional tersimpan, null pada PATCH menghapus, lebih dari 1000 karakter ditolak | 201/200, 400 |
+| V2-02 | PUT `/api/v1/products/{productId}` | PUT v1 tidak menghapus description yang diisi lewat v2; respons v1 tanpa description | 200 |
+| V2-03 | GET `/products?name=&page=&size=` | Tanpa parameter sama dengan v1; filter dan paginasi; header X-Total-Count; size > 100 ditolak | 200, 400 |
+| V2-04 | GET `/carts/{cartId}` | Item memuat unitPrice dan unitPrice × quantity = subtotal | 200 |
+| V2-05 | DELETE `/carts/{cartId}/items` | Seluruh item terhapus, Cart tetap ada, ulangi tetap 204; Cart tidak ada 404 | 204, 404 |
+| V2-06 | GET `/orders/{orderId}` | items memuat snapshot sesuai checkout; total = jumlah subtotal | 200 |
+| V2-07 | GET `/orders?customerId=` | Urutan terbaru dulu; customer tanpa Order menghasilkan array kosong; tanpa customerId 400 | 200, 400 |
+| V2-08 | POST `/orders/{orderId}/cancel` | PENDING → CANCELLED; ulangi tetap 200; CONFIRMED, Payment PENDING, Payment SUCCESS 409; stub Payment gagal 503 tanpa perubahan; tidak ada 404 | 200, 404, 409, 503 |
+| V2-09 | GET `/payments?orderId=` | Riwayat attempt urut id menaik; tanpa Payment array kosong; tanpa orderId 400 | 200, 400 |
+| V2-10 | Kompatibilitas v1 | Respons v1 tidak memuat description, unitPrice, atau items | — |
 
 ## 5. Skenario gagal dan invariant
 
