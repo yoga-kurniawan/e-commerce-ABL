@@ -1,0 +1,1205 @@
+openapi: '3.0.3'
+info:
+  title: 'E-Commerce Microservices API'
+  description: |
+    Dokumentasi API versi 2 untuk sistem e-commerce berbasis microservices (Product, Cart, Order, Payment).
+
+    **Strategi versioning (DEC-020).** Versi API dibedakan melalui URL path: `/api/v1` dan `/api/v2`.
+    v2 adalah perubahan backward-compatible terhadap v1:
+    - Seluruh 18 operasi v1 tersedia di v2 dengan request, status code, dan arti yang sama.
+    - Perubahan hanya berupa penambahan: field request opsional, field respons baru, query parameter opsional, dan operasi baru.
+    - Tidak ada field yang dihapus, diganti nama, diubah tipenya, atau menjadi wajib.
+    - Kontrak v1 tetap berlaku pada `specs/openapi.yaml` dan respons v1 tidak memuat field baru v2.
+
+    **Perubahan 1.0.0 → 2.0.0**
+
+    Penanda pada deskripsi operasi/field: `[Baru v2]` untuk yang ditambahkan, `[Diubah v2]` untuk bagian v1 yang diperbarui,
+    dan `[Koreksi v2]` untuk perilaku yang sudah ada sejak v1 tetapi baru didokumentasikan.
+
+    *Ditambahkan (operasi baru):*
+    - GET `/orders?customerId=`: riwayat pesanan pelanggan (DEC-022).
+    - GET `/payments?orderId=`: riwayat attempt pembayaran sebuah pesanan (DEC-022).
+    - DELETE `/carts/{cartId}/items`: pelanggan membersihkan seluruh item Cart sekaligus (DEC-022).
+    - POST `/orders/{orderId}/cancel`: membatalkan pesanan (DEC-023).
+
+    *Diubah (operasi v1 yang diperbarui, tetap backward-compatible):*
+    - GET `/products`: query parameter opsional `name`, `page`, `size` dan header `X-Total-Count` (DEC-022).
+    - POST/PUT/PATCH `/products`: field opsional `description` pada request; semua respons Product memuat `description` (DEC-021).
+    - PUT `/products/{productId}`: description yang tidak dikirim mengosongkan deskripsi; PUT v1 tetap mempertahankannya (DEC-021).
+    - Respons Cart dan PUT/PATCH item Cart: setiap item memuat `unitPrice` (DEC-021).
+    - Respons Order (POST, GET, PATCH, cancel, list): memuat `items` berisi snapshot item pesanan (DEC-021).
+    - Order `status`: CANCELLED kini dapat dicapai melalui operasi cancel (DEC-023).
+    - POST `/payments`: Order CANCELLED ditolak `ORDER_NOT_PAYABLE`; scope Idempotency-Key sama untuk v1 dan v2.
+
+    *Koreksi dokumentasi (perilaku sama dengan implementasi v1, sebelumnya tidak/kurang tercantum di 1.0.0):*
+    - PUT/PATCH `/carts/{cartId}/items/{productId}`: respons 200 memakai schema `UpdatedCartItem` (sebelumnya tanpa schema).
+    - POST/PUT/PATCH item Cart: 404 mencakup Cart/item/produk tidak ada, 409 saat stok kurang, 503 saat Product Service tidak dapat dihubungi.
+    - Respons 201 pada create Product, Cart, item Cart, dan Order memuat header `Location`.
+    - Kode error yang dipakai implementasi didokumentasikan (lihat Konvensi), dan ID memakai `format: int64`.
+
+    Total kontrak v2: 22 operasi pada 11 path. Simulator pembayaran development tetap memakai kontrak terpisah `specs/payment-simulator.openapi.yaml` dan tidak berversi.
+
+    **Konvensi.** Request dengan body memakai `Content-Type: application/json`. Error memakai schema `Error` (`code`, `message`).
+    Kode error umum: `BAD_REQUEST` (400), `NOT_FOUND` (404), `METHOD_NOT_ALLOWED` (405), `UNSUPPORTED_MEDIA_TYPE` (415),
+    `CONFLICT` (409, Cart/Order), `SERVICE_UNAVAILABLE` (503, Cart/Order), `INTERNAL_SERVER_ERROR` (500).
+    Payment memakai kode yang lebih spesifik sesuai deskripsi operasinya. customerId adalah referensi pelanggan, bukan identitas terautentikasi (OPEN-010).
+  version: '2.0.0'
+servers:
+  - url: 'http://localhost:8080/api/v2'
+    description: 'Development server melalui API Gateway'
+tags:
+  - name: 'Products'
+    description: 'Pengelolaan katalog produk'
+  - name: 'Carts'
+    description: 'Pengelolaan keranjang belanja'
+  - name: 'Orders'
+    description: 'Pengelolaan pesanan. PUT dan DELETE tidak disediakan: total dan item dihitung backend, sedangkan pembatalan memakai POST /orders/{orderId}/cancel agar data pesanan tetap tersimpan.'
+  - name: 'Payments'
+    description: 'Pengelolaan pembayaran. PUT dan DELETE tidak disediakan: amount berasal dari Order, status final berasal dari mekanisme backend, dan riwayat pembayaran tidak boleh dihapus.'
+paths:
+  /products:
+    get:
+      tags:
+        - 'Products'
+      summary: 'Mendapatkan daftar produk'
+      operationId: 'getProducts'
+      description: |
+        Hanya mengembalikan produk aktif (DEC-011), diurutkan berdasarkan id menaik.
+        Tanpa query parameter, perilaku sama dengan v1: seluruh produk aktif dikembalikan.
+        `name` memfilter nama yang mengandung teks tersebut tanpa membedakan huruf besar/kecil.
+        Paginasi hanya berlaku jika `page` atau `size` dikirim; nilai yang tidak dikirim memakai default.
+        Bentuk respons tetap array (bukan objek halaman) agar kompatibel dengan v1.
+        [Diubah v2, DEC-022] Query parameter name/page/size dan header X-Total-Count ditambahkan; respons Product memuat description.
+      parameters:
+        - name: 'name'
+          in: 'query'
+          required: false
+          description: 'Filter nama produk (contains, case-insensitive). String kosong diperlakukan seperti tidak dikirim.'
+          schema:
+            type: 'string'
+            maxLength: 255
+          example: 'keyboard'
+        - name: 'page'
+          in: 'query'
+          required: false
+          description: 'Nomor halaman mulai dari 0. Default 0 jika hanya size yang dikirim.'
+          schema:
+            type: 'integer'
+            minimum: 0
+          example: 0
+        - name: 'size'
+          in: 'query'
+          required: false
+          description: 'Jumlah produk per halaman. Default 20 jika hanya page yang dikirim.'
+          schema:
+            type: 'integer'
+            minimum: 1
+            maximum: 100
+          example: 20
+      responses:
+        '200':
+          description: 'Daftar produk berhasil diambil. Halaman di luar jangkauan menghasilkan array kosong.'
+          headers:
+            X-Total-Count:
+              description: 'Jumlah seluruh produk aktif yang cocok dengan filter, sebelum paginasi'
+              schema:
+                type: 'integer'
+          content:
+            application/json:
+              schema:
+                type: 'array'
+                items:
+                  $ref: '#/components/schemas/Product'
+              example:
+                - id: 1
+                  name: 'Keyboard Mechanical'
+                  description: 'Keyboard mechanical 87 tombol dengan switch biru'
+                  price: 350000
+                  stock: 20
+                - id: 2
+                  name: 'Mouse Wireless'
+                  description: null
+                  price: 150000
+                  stock: 35
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      tags:
+        - 'Products'
+      summary: 'Menambahkan produk baru'
+      operationId: 'createProduct'
+      description: '[Diubah v2, DEC-021] Field description opsional; jika tidak dikirim atau null, produk disimpan tanpa deskripsi. [Koreksi v2] Respons 201 memuat header Location.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+            example:
+              name: 'Keyboard Mechanical'
+              description: 'Keyboard mechanical 87 tombol dengan switch biru'
+              price: 350000
+              stock: 20
+      responses:
+        '201':
+          description: 'Produk berhasil dibuat'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /products/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags:
+        - 'Products'
+      summary: 'Mendapatkan detail produk'
+      operationId: 'getProductById'
+      description: 'Produk nonaktif diperlakukan sebagai tidak ditemukan (DEC-011).'
+      responses:
+        '200':
+          description: 'Detail produk berhasil diambil'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - 'Products'
+      summary: 'Memperbarui seluruh informasi produk'
+      operationId: 'replaceProduct'
+      description: |
+        [Diubah v2, DEC-021] Mengganti seluruh representasi produk. Pada v2, description yang tidak dikirim atau null mengosongkan deskripsi (semantik PUT sebagai pengganti penuh).
+        Catatan kompatibilitas: PUT melalui v1 tidak mengenal description sehingga mempertahankan description yang tersimpan (DEC-021).
+        Produk nonaktif diperlakukan sebagai tidak ditemukan (DEC-011).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: 'Produk berhasil diperbarui'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - 'Products'
+      summary: 'Memperbarui sebagian informasi produk'
+      operationId: 'updateProduct'
+      description: '[Diubah v2, DEC-021] Field yang tidak dikirim dipertahankan; body kosong ditolak. Null eksplisit pada name/price/stock ditolak 400. Null eksplisit pada description diizinkan untuk menghapus deskripsi. Produk nonaktif diperlakukan sebagai tidak ditemukan.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductPatch'
+            example:
+              description: 'Keyboard mechanical 87 tombol, switch biru, kabel USB-C'
+      responses:
+        '200':
+          description: 'Produk berhasil diperbarui'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - 'Products'
+      summary: 'Menghapus produk dari katalog'
+      operationId: 'deleteProduct'
+      description: 'Soft delete: menonaktifkan produk dan mempertahankan baris database. Produk nonaktif dianggap tidak ditemukan; tidak tersedia reaktivasi. Status 409 dipertahankan dari kontrak sumber, tetapi belum memiliki kondisi bisnis pada implementasi saat ini (DEC-011).'
+      responses:
+        '204':
+          description: 'Produk berhasil dihapus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'Produk tidak dapat dihapus karena masih digunakan (belum diterapkan)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /carts:
+    post:
+      tags:
+        - 'Carts'
+      summary: 'Membuat keranjang kosong'
+      description: 'Backend menghasilkan ID Cart. customerId merupakan referensi pelanggan, bukan bukti identitas terautentikasi. Kebijakan Cart aktif per pelanggan dan idempotency belum ditetapkan; endpoint ini belum menjanjikan pengembalian Cart yang sudah ada.'
+      operationId: 'createCart'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartInput'
+      responses:
+        '201':
+          description: 'Keranjang kosong berhasil dibuat dengan ID dari backend'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+              example:
+                id: 27
+                customerId: 101
+                items: []
+                total: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /carts/{cartId}:
+    parameters:
+      - $ref: '#/components/parameters/CartId'
+    get:
+      tags:
+        - 'Carts'
+      summary: 'Mendapatkan isi keranjang'
+      operationId: 'getCart'
+      description: '[Diubah v2, DEC-021] Setiap item memuat unitPrice.'
+      responses:
+        '200':
+          description: 'Keranjang berhasil diambil'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+              example:
+                id: 27
+                customerId: 101
+                items:
+                  - productId: 1
+                    quantity: 2
+                    unitPrice: 350000
+                    subtotal: 700000
+                total: 700000
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /carts/{cartId}/items:
+    parameters:
+      - $ref: '#/components/parameters/CartId'
+    post:
+      tags:
+        - 'Carts'
+      summary: 'Menambahkan produk ke keranjang'
+      description: 'Cart harus sudah ada. Jika produk sudah ada dalam Cart, quantity request ditambahkan pada quantity item tersebut; validasi stok menggunakan quantity akhir (OPEN-002 A). Harga satuan disimpan dari Product saat produk pertama masuk Cart untuk dipakai saat checkout (OPEN-003 B). [Diubah v2, DEC-021] Item pada respons memuat unitPrice. [Koreksi v2] Status 404 (produk tidak ada), 409, 503, dan header Location sudah dikembalikan implementasi v1.'
+      operationId: 'addCartItem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartItemInput'
+      responses:
+        '201':
+          description: 'Produk berhasil ditambahkan ke keranjang'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: 'Keranjang tidak ditemukan, atau produk tidak ada/nonaktif'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          $ref: '#/components/responses/InsufficientStock'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    delete:
+      tags:
+        - 'Carts'
+      summary: 'Mengosongkan keranjang'
+      operationId: 'clearCartItems'
+      description: |
+        Menghapus seluruh item dari Cart atas permintaan pelanggan, misalnya untuk membersihkan Cart yang sudah terlalu banyak isinya atau berisi produk yang tidak lagi diminati.
+        Bukan bagian dari alur checkout. Cart itu sendiri tetap ada dengan items kosong dan total 0.
+        Idempotent: Cart yang sudah kosong tetap menghasilkan 204. Tidak memanggil Product Service.
+        [Baru v2, DEC-022]
+      responses:
+        '204':
+          description: 'Seluruh item berhasil dihapus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /carts/{cartId}/items/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/CartId'
+      - $ref: '#/components/parameters/CartProductId'
+    put:
+      tags:
+        - 'Carts'
+      summary: 'Mengganti data item keranjang'
+      operationId: 'replaceCartItem'
+      description: 'Menetapkan quantity tujuan untuk item yang sudah ada. Stok diperiksa terhadap quantity baru; harga satuan tersimpan tidak berubah. [Diubah v2, DEC-021] Respons memuat unitPrice. [Koreksi v2] Schema respons 200 UpdatedCartItem serta status 503 sesuai implementasi v1.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartItemQuantityInput'
+      responses:
+        '200':
+          description: 'Item keranjang berhasil diperbarui'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdatedCartItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/CartItemNotFound'
+        '409':
+          $ref: '#/components/responses/InsufficientStock'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    patch:
+      tags:
+        - 'Carts'
+      summary: 'Memperbarui sebagian data item keranjang'
+      operationId: 'updateCartItem'
+      description: 'Body kosong dan quantity null ditolak 400. Stok diperiksa terhadap quantity baru. [Diubah v2, DEC-021] Respons memuat unitPrice. [Koreksi v2] Schema respons 200 UpdatedCartItem serta status 503 sesuai implementasi v1.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: 'object'
+              properties:
+                quantity:
+                  type: 'integer'
+                  minimum: 1
+              minProperties: 1
+      responses:
+        '200':
+          description: 'Item keranjang berhasil diperbarui'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdatedCartItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/CartItemNotFound'
+        '409':
+          $ref: '#/components/responses/InsufficientStock'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    delete:
+      tags:
+        - 'Carts'
+      summary: 'Menghapus item dari keranjang'
+      operationId: 'deleteCartItem'
+      description: 'Menghapus satu item; Cart tetap ada. Tidak memanggil Product Service.'
+      responses:
+        '204':
+          description: 'Item berhasil dihapus'
+        '404':
+          description: 'Keranjang tidak ditemukan atau item tidak ada dalam keranjang'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /orders:
+    get:
+      tags:
+        - 'Orders'
+      summary: 'Mendapatkan riwayat pesanan pelanggan'
+      operationId: 'listOrders'
+      description: |
+        Mengembalikan seluruh pesanan untuk customerId, diurutkan dari id terbesar (terbaru) ke terkecil.
+        customerId yang tidak memiliki pesanan menghasilkan array kosong, bukan 404.
+        customerId adalah filter referensi, bukan otorisasi (OPEN-010). Paginasi belum disediakan.
+        [Baru v2, DEC-022]
+      parameters:
+        - name: 'customerId'
+          in: 'query'
+          required: true
+          description: 'Referensi pelanggan pemilik pesanan'
+          schema:
+            type: 'integer'
+            format: 'int64'
+          example: 101
+      responses:
+        '200':
+          description: 'Daftar pesanan berhasil diambil'
+          content:
+            application/json:
+              schema:
+                type: 'array'
+                items:
+                  $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      tags:
+        - 'Orders'
+      summary: 'Membuat pesanan baru'
+      operationId: 'createOrder'
+      description: 'Pesanan dibentuk dari Cart milik customerId yang sama. Harga item memakai harga tersimpan pada Cart (OPEN-003 B); nama produk dan stok dibaca dari Product saat checkout. Pemeriksaan stok bukan reservasi (OPEN-004). Cart tidak dikosongkan otomatis (DEC-012). [Diubah v2, DEC-021] Respons memuat items. [Koreksi v2] Respons 201 memuat header Location.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderInput'
+      responses:
+        '201':
+          description: 'Pesanan berhasil dibuat'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: 'Keranjang tidak ditemukan'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 'Keranjang kosong, bukan milik customerId, berisi produk yang tidak lagi tersedia, atau stok tidak mencukupi'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /orders/{orderId}:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    get:
+      tags:
+        - 'Orders'
+      summary: 'Mendapatkan detail pesanan'
+      operationId: 'getOrder'
+      description: '[Diubah v2, DEC-021] Respons memuat items.'
+      responses:
+        '200':
+          description: 'Detail pesanan berhasil diambil'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - 'Orders'
+      summary: 'Memperbarui atribut pesanan yang diizinkan'
+      operationId: 'updateOrder'
+      description: 'Hanya shippingAddress yang dapat diubah, dan hanya saat status PENDING (DEC-012). Null eksplisit, string kosong/whitespace, dan body tanpa shippingAddress ditolak; atribut lain seperti status/total diabaikan. Pembatalan tidak dilakukan melalui PATCH, melainkan POST /orders/{orderId}/cancel. [Diubah v2, DEC-021] Respons memuat items.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: 'object'
+              properties:
+                shippingAddress:
+                  type: 'string'
+              minProperties: 1
+            example:
+              shippingAddress: 'Jl. Veteran No. 10, Malang'
+      responses:
+        '200':
+          description: 'Pesanan berhasil diperbarui'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'Perubahan tidak diizinkan berdasarkan status pesanan'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /orders/{orderId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags:
+        - 'Orders'
+      summary: 'Membatalkan pesanan'
+      operationId: 'cancelOrder'
+      description: |
+        Mengubah status pesanan PENDING menjadi CANCELLED. Data pesanan dan item tetap tersimpan.
+        Tidak memerlukan request body; body yang dikirim diabaikan.
+        - PENDING tanpa Payment PENDING/SUCCESS → 200, status CANCELLED.
+        - Sudah CANCELLED → 200 dengan Order apa adanya (idempotent, tanpa perubahan).
+        - CONFIRMED → 409. Pembatalan setelah pembayaran memerlukan workflow refund tersendiri.
+        - Masih memiliki Payment PENDING → 409. Selesaikan atau gagalkan Payment terlebih dahulu.
+        - Sudah memiliki Payment SUCCESS → 409.
+        Order Service memeriksa Payment melalui GET /api/v2/payments?orderId={orderId} (operasi ini hanya ada di v2); jika Payment Service tidak dapat dihubungi atau responsnya tidak valid → 503 dan status tidak diubah.
+        Pembatalan tidak mengembalikan stok karena stok belum direservasi (OPEN-004) dan tidak mengosongkan Cart.
+        [Baru v2, DEC-023]
+      responses:
+        '200':
+          description: 'Pesanan berstatus CANCELLED'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                id: 501
+                customerId: 101
+                total: 700000
+                status: 'CANCELLED'
+                shippingAddress: null
+                items:
+                  - productId: 1
+                    productName: 'Keyboard Mechanical'
+                    quantity: 2
+                    unitPrice: 350000
+                    subtotal: 700000
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'Pesanan tidak dapat dibatalkan: status CONFIRMED, masih ada Payment PENDING, atau sudah ada Payment SUCCESS'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                confirmed:
+                  value:
+                    code: 'CONFLICT'
+                    message: 'Pesanan berstatus CONFIRMED tidak dapat dibatalkan'
+                paymentPending:
+                  value:
+                    code: 'CONFLICT'
+                    message: 'Pesanan masih memiliki pembayaran PENDING'
+                paymentSuccess:
+                  value:
+                    code: 'CONFLICT'
+                    message: 'Pesanan sudah memiliki pembayaran SUCCESS'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /payments:
+    get:
+      tags:
+        - 'Payments'
+      summary: 'Mendapatkan riwayat attempt pembayaran sebuah pesanan'
+      operationId: 'listPayments'
+      description: |
+        Mengembalikan seluruh Payment untuk orderId, diurutkan berdasarkan id menaik (urutan attempt, DEC-015).
+        orderId tanpa Payment menghasilkan array kosong; endpoint ini tidak memanggil Order Service sehingga tidak membedakan Order yang tidak ada.
+        Dipakai juga oleh Order Service saat pembatalan pesanan (DEC-023).
+        [Baru v2, DEC-022]
+      parameters:
+        - name: 'orderId'
+          in: 'query'
+          required: true
+          description: 'ID pesanan'
+          schema:
+            type: 'integer'
+            format: 'int64'
+          example: 501
+      responses:
+        '200':
+          description: 'Daftar Payment berhasil diambil'
+          content:
+            application/json:
+              schema:
+                type: 'array'
+                items:
+                  $ref: '#/components/schemas/Payment'
+              example:
+                - id: 9001
+                  orderId: 501
+                  method: 'TRANSFER'
+                  status: 'FAILED'
+                  amount: 700000
+                - id: 9002
+                  orderId: 501
+                  method: 'E_WALLET'
+                  status: 'PENDING'
+                  amount: 700000
+                  transactionReference: 'TRX-DEMO-001'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '503':
+          $ref: '#/components/responses/PaymentUnavailable'
+    post:
+      tags:
+        - 'Payments'
+      summary: 'Membuat permintaan pembayaran'
+      description: '[Diubah v2] Order CANCELLED ditolak ORDER_NOT_PAYABLE (DEC-023). Idempotency-Key wajib dibuat client untuk satu operasi dan digunakan kembali saat retry. Scope key sama untuk v1 dan v2 (CREATE_PAYMENT_V1), sehingga retry melalui versi berbeda dengan key dan payload sama tetap direplay. Key sama dengan payload berbeda ditolak 409 IDEMPOTENCY_KEY_REUSED. Untuk create yang berhasil, key dan payload yang sama mengembalikan status HTTP serta body respons create pertama tanpa membuat Payment baru, meskipun status Payment kemudian berubah. Hanya hasil create sukses disimpan untuk replay; error sebelum perubahan tersimpan tidak menjadi replay final. Jika commit berhasil tetapi pengiriman respons gagal, retry tetap memperoleh hasil tersimpan. Duplikat saat operasi create dengan key/payload sama masih berjalan menerima 409 REQUEST_IN_PROGRESS dan retry sendiri setelah jeda dengan key sama; tidak ada antrean atau jaminan FIFO. Respons disimpan selama 24 jam sejak hasil create pertama tersimpan; retry tidak memperpanjang retensi. Retensi bukan batas waktu membayar. Gunakan GET Payment untuk state terkini.'
+      operationId: 'createPayment'
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentInput'
+      responses:
+        '201':
+          description: 'Permintaan pembayaran berhasil dibuat, atau respons create pertama diputar ulang untuk key dan payload yang sama'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: 'Order tidak ditemukan (ORDER_NOT_FOUND)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 'REQUEST_IN_PROGRESS jika operasi dengan key/payload sama masih berjalan: retry setelah jeda dengan key sama. IDEMPOTENCY_KEY_REUSED jika key sama dipakai dengan payload berbeda. ORDER_NOT_PAYABLE untuk Order bukan PENDING (termasuk CANCELLED); PAYMENT_ALREADY_PENDING untuk attempt aktif; ORDER_ALREADY_PAID setelah SUCCESS; PAYMENT_OPERATION_BUSY untuk lock sibuk. Konflik tidak menggantikan hasil create sukses untuk replay.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                inProgress:
+                  value:
+                    code: 'REQUEST_IN_PROGRESS'
+                    message: 'Request masih diproses; retry dengan key yang sama setelah jeda'
+                differentPayload:
+                  value:
+                    code: 'IDEMPOTENCY_KEY_REUSED'
+                    message: 'Key sudah dipakai untuk payload berbeda'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '502':
+          $ref: '#/components/responses/OrderUpstreamError'
+        '503':
+          $ref: '#/components/responses/PaymentUnavailable'
+        '504':
+          $ref: '#/components/responses/OrderTimeout'
+  /payments/{paymentId}:
+    parameters:
+      - $ref: '#/components/parameters/PaymentId'
+    get:
+      tags:
+        - 'Payments'
+      summary: 'Mendapatkan status pembayaran'
+      operationId: 'getPayment'
+      responses:
+        '200':
+          description: 'Status pembayaran berhasil diambil'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '503':
+          $ref: '#/components/responses/PaymentUnavailable'
+    patch:
+      tags:
+        - 'Payments'
+      summary: 'Memperbarui atribut pembayaran yang diizinkan'
+      description: 'Hanya transactionReference dapat diisi/diperbaiki selama PENDING. Tolak null, string kosong atau seluruhnya whitespace, body kosong, dan field asing dengan 400. SUCCESS/FAILED menolak perubahan dengan 409. Operasi ini tidak mengubah amount/status atau memverifikasi pembayaran.'
+      operationId: 'updatePayment'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentReferencePatch'
+      responses:
+        '200':
+          description: 'Data pembayaran berhasil diperbarui'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 'PAYMENT_NOT_MODIFIABLE pada state terminal; PAYMENT_OPERATION_BUSY saat lock sibuk'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/ServerError'
+        '503':
+          $ref: '#/components/responses/PaymentUnavailable'
+components:
+  parameters:
+    ProductId:
+      name: 'productId'
+      in: 'path'
+      required: true
+      description: 'ID produk'
+      schema:
+        type: 'integer'
+        format: 'int64'
+    CartId:
+      name: 'cartId'
+      in: 'path'
+      required: true
+      description: 'ID keranjang'
+      schema:
+        type: 'integer'
+        format: 'int64'
+    CartProductId:
+      name: 'productId'
+      in: 'path'
+      required: true
+      description: 'ID produk pada item keranjang'
+      schema:
+        type: 'integer'
+        format: 'int64'
+    OrderId:
+      name: 'orderId'
+      in: 'path'
+      required: true
+      description: 'ID pesanan'
+      schema:
+        type: 'integer'
+        format: 'int64'
+    PaymentId:
+      name: 'paymentId'
+      in: 'path'
+      required: true
+      description: 'ID pembayaran'
+      schema:
+        type: 'integer'
+        format: 'int64'
+    IdempotencyKey:
+      name: 'Idempotency-Key'
+      in: 'header'
+      required: true
+      description: 'Identitas operasi create dari client; gunakan key yang sama untuk retry operasi yang sama. Header yang tidak dikirim menghasilkan 400. Nilai case-sensitive 1-128 karakter ASCII; scope CREATE_PAYMENT_V1 dalam satu payment_db, bukan per Order. Nilai tidak di-trim.'
+      schema:
+        type: 'string'
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+      example: 'create-payment-demo-001'
+  headers:
+    Location:
+      description: 'URL resource yang dibuat'
+      schema:
+        type: 'string'
+        format: 'uri'
+  schemas:
+    Product:
+      type: 'object'
+      required: [id, name, price, stock, description]
+      properties:
+        id:
+          type: 'integer'
+          format: 'int64'
+          example: 1
+        name:
+          type: 'string'
+          example: 'Keyboard Mechanical'
+        description:
+          type: 'string'
+          nullable: true
+          description: '[Baru v2] Deskripsi produk; null jika belum diisi. Tidak dikirim pada respons v1.'
+          example: 'Keyboard mechanical 87 tombol dengan switch biru'
+        price:
+          type: 'number'
+          description: 'BigDecimal pada implementasi'
+          example: 350000
+        stock:
+          type: 'integer'
+          example: 20
+    ProductInput:
+      type: 'object'
+      required:
+        - 'name'
+        - 'price'
+        - 'stock'
+      properties:
+        name:
+          type: 'string'
+          example: 'Keyboard Mechanical'
+        description:
+          type: 'string'
+          nullable: true
+          maxLength: 1000
+          description: '[Baru v2] Opsional. Tidak dikirim atau null berarti tanpa deskripsi.'
+          example: 'Keyboard mechanical 87 tombol dengan switch biru'
+        price:
+          type: 'number'
+          minimum: 0
+          example: 350000
+        stock:
+          type: 'integer'
+          minimum: 0
+          example: 20
+    ProductPatch:
+      type: 'object'
+      minProperties: 1
+      properties:
+        name:
+          type: 'string'
+        description:
+          type: 'string'
+          nullable: true
+          maxLength: 1000
+          description: '[Baru v2] null menghapus deskripsi'
+        price:
+          type: 'number'
+          minimum: 0
+        stock:
+          type: 'integer'
+          minimum: 0
+    CartInput:
+      type: 'object'
+      required:
+        - 'customerId'
+      properties:
+        customerId:
+          type: 'integer'
+          format: 'int64'
+          description: 'Referensi pelanggan; tidak membuktikan identitas terautentikasi (OPEN-010).'
+          example: 101
+    Cart:
+      type: 'object'
+      required: [id, customerId, items, total]
+      properties:
+        id:
+          type: 'integer'
+          format: 'int64'
+          example: 27
+        customerId:
+          type: 'integer'
+          format: 'int64'
+          description: 'Referensi pelanggan yang terkait dengan Cart.'
+          example: 101
+        items:
+          type: 'array'
+          items:
+            $ref: '#/components/schemas/CartItem'
+        total:
+          type: 'number'
+          description: 'Jumlah subtotal seluruh item'
+          example: 700000
+    CartItem:
+      type: 'object'
+      required: [productId, quantity, unitPrice, subtotal]
+      properties:
+        productId:
+          type: 'integer'
+          format: 'int64'
+          example: 1
+        quantity:
+          type: 'integer'
+          example: 2
+        unitPrice:
+          type: 'number'
+          description: '[Baru v2] Harga satuan yang disimpan saat produk pertama masuk Cart (OPEN-003 B); tidak mengikuti perubahan harga katalog.'
+          example: 350000
+        subtotal:
+          type: 'number'
+          description: 'unitPrice × quantity'
+          example: 700000
+    CartItemInput:
+      type: 'object'
+      required:
+        - 'productId'
+        - 'quantity'
+      properties:
+        productId:
+          type: 'integer'
+          format: 'int64'
+          example: 1
+        quantity:
+          type: 'integer'
+          minimum: 1
+          example: 2
+    CartItemQuantityInput:
+      type: 'object'
+      required:
+        - 'quantity'
+      properties:
+        quantity:
+          type: 'integer'
+          minimum: 1
+          example: 3
+    UpdatedCartItem:
+      type: 'object'
+      description: '[Koreksi v2] Respons PUT/PATCH item yang sudah dikembalikan implementasi v1 (cartId, productId, quantity, subtotal) tetapi belum memiliki schema pada 1.0.0. [Diubah v2] unitPrice ditambahkan.'
+      required: [cartId, productId, quantity, unitPrice, subtotal]
+      properties:
+        cartId:
+          type: 'integer'
+          format: 'int64'
+          example: 27
+        productId:
+          type: 'integer'
+          format: 'int64'
+          example: 1
+        quantity:
+          type: 'integer'
+          example: 3
+        unitPrice:
+          type: 'number'
+          description: '[Baru v2] Harga satuan tersimpan'
+          example: 350000
+        subtotal:
+          type: 'number'
+          example: 1050000
+    OrderInput:
+      type: 'object'
+      required:
+        - 'cartId'
+        - 'customerId'
+      properties:
+        cartId:
+          type: 'integer'
+          format: 'int64'
+          example: 27
+        customerId:
+          type: 'integer'
+          format: 'int64'
+          example: 101
+    Order:
+      type: 'object'
+      required: [id, customerId, total, status, shippingAddress, items]
+      properties:
+        id:
+          type: 'integer'
+          format: 'int64'
+          example: 501
+        customerId:
+          type: 'integer'
+          format: 'int64'
+          example: 101
+        total:
+          type: 'number'
+          description: 'Jumlah subtotal item; dihitung backend'
+          example: 700000
+        status:
+          type: 'string'
+          enum:
+            - 'PENDING'
+            - 'CONFIRMED'
+            - 'CANCELLED'
+          description: 'PENDING saat dibuat. [Diubah v2] CANCELLED melalui POST /orders/{orderId}/cancel (DEC-023). Transisi ke CONFIRMED belum ditetapkan.'
+          example: 'PENDING'
+        shippingAddress:
+          type: 'string'
+          nullable: true
+          description: 'Alamat pengiriman; null sampai diisi melalui PATCH (API-001).'
+          example: 'Jl. Veteran No. 10, Malang'
+        items:
+          type: 'array'
+          description: '[Baru v2] Snapshot item saat checkout (OPEN-012); tidak dihitung ulang dari katalog.'
+          items:
+            $ref: '#/components/schemas/OrderItem'
+    OrderItem:
+      type: 'object'
+      description: '[Baru v2]'
+      required: [productId, productName, quantity, unitPrice, subtotal]
+      properties:
+        productId:
+          type: 'integer'
+          format: 'int64'
+          example: 1
+        productName:
+          type: 'string'
+          description: 'Nama produk saat checkout'
+          example: 'Keyboard Mechanical'
+        quantity:
+          type: 'integer'
+          example: 2
+        unitPrice:
+          type: 'number'
+          description: 'Harga satuan dari Cart (OPEN-003 B)'
+          example: 350000
+        subtotal:
+          type: 'number'
+          example: 700000
+    PaymentInput:
+      type: 'object'
+      additionalProperties: false
+      description: 'Hanya orderId integer yang muat di Long dan method enum. Null, field asing, serta properti JSON duplikat ditolak 400.'
+      required:
+        - 'orderId'
+        - 'method'
+      properties:
+        orderId:
+          type: 'integer'
+          format: 'int64'
+          example: 501
+        method:
+          type: 'string'
+          enum:
+            - 'TRANSFER'
+            - 'E_WALLET'
+            - 'COD'
+          example: 'E_WALLET'
+    PaymentReferencePatch:
+      type: 'object'
+      additionalProperties: false
+      required:
+        - 'transactionReference'
+      properties:
+        transactionReference:
+          type: 'string'
+          minLength: 1
+          pattern: '\S'
+          description: 'Reference yang mengandung setidaknya satu karakter non-whitespace. Null dan nilai kosong ditolak; teks dipertahankan persis tanpa trim otomatis.'
+          example: 'TRX-DEMO-001'
+    Payment:
+      type: 'object'
+      required: [id, orderId, method, status, amount]
+      properties:
+        id:
+          type: 'integer'
+          format: 'int64'
+          example: 9001
+        orderId:
+          type: 'integer'
+          format: 'int64'
+          example: 501
+        method:
+          type: 'string'
+          enum:
+            - 'TRANSFER'
+            - 'E_WALLET'
+            - 'COD'
+          example: 'E_WALLET'
+        status:
+          type: 'string'
+          enum:
+            - 'PENDING'
+            - 'SUCCESS'
+            - 'FAILED'
+          example: 'PENDING'
+        amount:
+          type: 'number'
+          description: 'Total akhir dari Order; BigDecimal/NUMERIC tanpa pembulatan diam-diam.'
+          example: 700000.125
+        transactionReference:
+          type: 'string'
+          description: 'Tidak dikirim sebelum diisi; tidak membuktikan pembayaran berhasil.'
+          example: 'TRX-DEMO-001'
+    Error:
+      type: 'object'
+      required: [code, message]
+      properties:
+        code:
+          type: 'string'
+          description: 'Kode error stabil untuk diproses client; lihat konvensi pada info.description.'
+          example: 'NOT_FOUND'
+        message:
+          type: 'string'
+          description: 'Pesan untuk manusia; dapat berubah dan tidak boleh di-parse.'
+          example: 'Data tidak ditemukan'
+  responses:
+    BadRequest:
+      description: 'BAD_REQUEST: format, tipe, atau nilai permintaan tidak valid'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: 'BAD_REQUEST'
+            message: 'Format atau nilai permintaan tidak valid'
+    NotFound:
+      description: 'NOT_FOUND: data tidak ditemukan'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: 'NOT_FOUND'
+            message: 'Data tidak ditemukan'
+    CartItemNotFound:
+      description: 'NOT_FOUND: keranjang tidak ditemukan, item tidak ada dalam keranjang, atau produk tidak ada/nonaktif'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: 'NOT_FOUND'
+            message: 'Item tidak ditemukan dalam keranjang'
+    InsufficientStock:
+      description: 'CONFLICT: quantity akhir melebihi stok produk yang tersedia'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: 'CONFLICT'
+            message: 'Jumlah melebihi stok yang tersedia'
+    DependencyUnavailable:
+      description: 'SERVICE_UNAVAILABLE: layanan dependency tidak dapat dihubungi atau memberi respons tidak valid'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: 'SERVICE_UNAVAILABLE'
+            message: 'Layanan produk tidak dapat dihubungi'
+    ServerError:
+      description: 'INTERNAL_SERVER_ERROR: terjadi kesalahan pada server'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    PaymentUnavailable:
+      description: 'DEPENDENCY_UNAVAILABLE: koneksi Order gagal, database tidak tersedia, atau hasil commit belum dapat dipastikan. Retry dengan key sama; bukan bukti Payment FAILED.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    OrderUpstreamError:
+      description: 'ORDER_UPSTREAM_ERROR: upstream 5xx atau respons Order invalid, ID berbeda, total hilang/negatif/tidak finite, atau status tidak dikenal.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    OrderTimeout:
+      description: 'ORDER_TIMEOUT: timeout koneksi/baca Order; bukan bukti Payment FAILED.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
