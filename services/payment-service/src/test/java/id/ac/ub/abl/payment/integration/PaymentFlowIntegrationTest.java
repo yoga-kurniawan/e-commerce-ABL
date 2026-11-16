@@ -63,6 +63,67 @@ class PaymentFlowIntegrationTest extends PaymentIntegrationSupport {
         }
         assertThat(orders().requests).allMatch(value -> value.equals("GET /api/v1/orders/501"));
     }
+    @ParameterizedTest @ValueSource(strings = {"/api/v1/payments", "/api/v2/payments"})
+    void create_whenRetriedAcrossVersionsAfterStateChange_shouldReplayStoredBodyWithoutNewAttempt(String initialPath) {
+        String payload = "{\"orderId\":501,\"method\":\"COD\"}";
+        String created = request("POST", initialPath, payload, "cross-version", false, 201);
+        long paymentId = id(created);
+        result(paymentId, "SUCCESS", 200);
+        String current = request("GET", "/api/v2/payments/" + paymentId, null, null, false, 200);
+        assertThat(body(current).get("status").asText()).isEqualTo("SUCCESS");
+        int lookups = orders().requests.size();
+        orders().reply.set(exchange -> orders().send(exchange, 500, "{}"));
+        String retryPath = initialPath.equals(BASE) ? "/api/v2/payments" : BASE;
+
+        assertThat(request("POST", retryPath, payload, "cross-version", false, 201)).isEqualTo(created);
+        error(request("POST", retryPath, "{\"orderId\":501,\"method\":\"TRANSFER\"}",
+                "cross-version", false, 409), "IDEMPOTENCY_KEY_REUSED");
+
+        assertThat(body(created).get("status").asText()).isEqualTo("PENDING");
+        assertThat(count("payments")).isEqualTo(1);
+        assertThat(count("payment_idempotency")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT operation FROM payment_idempotency", String.class))
+                .isEqualTo("CREATE_PAYMENT_V1");
+        assertThat(orders().requests).hasSize(lookups)
+                .allMatch(value -> value.equals("GET /api/v1/orders/501"));
+    }
+    @Test void listV2_whenHistoryExists_shouldReadCurrentStatesWithoutOrderLookupOrMutation() {
+        String first = request("POST", "/api/v2/payments", "{\"orderId\":501,\"method\":\"COD\"}",
+                "history-failed", false, 201);
+        long firstId = id(first);
+        request("PATCH", "/api/v2/payments/" + firstId, "{\"transactionReference\":\"  history-ref  \"}", null, false, 200);
+        result(firstId, "FAILED", 200);
+        String next = request("POST", "/api/v2/payments", "{\"orderId\":501,\"method\":\"TRANSFER\"}",
+                "history-pending", false, 201);
+        create("other-order", 502, "COD", 201);
+        int lookups = orders().requests.size();
+        var before = jdbc.queryForList("SELECT * FROM payments ORDER BY id");
+        orders().reply.set(exchange -> orders().send(exchange, 500, "{}"));
+
+        var history = body(request("GET", "/api/v2/payments?orderId=501", null, null, false, 200));
+
+        assertThat(history.isArray()).isTrue();
+        assertThat(history.size()).isEqualTo(2);
+        assertThat(history.get(0).get("id").asLong()).isEqualTo(firstId);
+        assertThat(history.get(0).get("status").asText()).isEqualTo("FAILED");
+        assertThat(history.get(0).get("transactionReference").asText()).isEqualTo("  history-ref  ");
+        assertThat(history.get(1).get("id").asLong()).isEqualTo(id(next));
+        assertThat(history.get(1).get("status").asText()).isEqualTo("PENDING");
+        assertThat(history.get(1).has("transactionReference")).isFalse();
+        assertThat(request("GET", "/api/v2/payments?orderId=999", null, null, false, 200)).isEqualTo("[]");
+        assertThat(orders().requests).hasSize(lookups);
+        assertThat(jdbc.queryForList("SELECT * FROM payments ORDER BY id")).isEqualTo(before);
+    }
+    @Test void createV2_whenOrderCancelled_shouldRejectNewPaymentAndReleaseClaim() {
+        orders().reply.set(exchange -> orders().send(exchange, 200, "{\"id\":501,\"total\":700000,\"status\":\"CANCELLED\"}"));
+
+        error(request("POST", "/api/v2/payments", "{\"orderId\":501,\"method\":\"COD\"}",
+                "cancelled-v2", false, 409), "ORDER_NOT_PAYABLE");
+
+        assertThat(count("payments")).isZero();
+        assertThat(count("payment_idempotency")).isZero();
+        assertThat(orders().requests).containsExactly("GET /api/v1/orders/501");
+    }
     @Test void create_whenKeyMissingOrBodyInvalid_shouldNotClaimOrLookupOrder() {
         error(create(null, 501, "COD", 400), "BAD_REQUEST");
         error(request("POST", BASE, "{\"orderId\":501,\"method\":\"COD\",\"amount\":1}", "invalid", false, 400), "BAD_REQUEST");

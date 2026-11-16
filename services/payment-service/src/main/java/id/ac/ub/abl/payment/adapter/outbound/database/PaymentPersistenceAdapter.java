@@ -1,5 +1,6 @@
 package id.ac.ub.abl.payment.adapter.outbound.database;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
 import id.ac.ub.abl.payment.domain.Payment;
@@ -24,6 +25,11 @@ public class PaymentPersistenceAdapter implements PaymentStore {
     }
     public Optional<Payment> findById(Long id) {
         return transactions.run("PAYMENT_OPERATION_BUSY", () -> payments.findById(id).map(mapper::toDomain));
+    }
+    @Override
+    public List<Payment> findByOrderId(Long orderId) {
+        return transactions.run("DEPENDENCY_UNAVAILABLE", () -> payments.findByOrderIdOrderByIdAsc(orderId)
+                .stream().map(mapper::toDomain).toList());
     }
     public Payment changeReference(PatchPaymentCommand command) {
         return mutate(command.paymentId(), payment -> payment.changeReference(command.transactionReference()));

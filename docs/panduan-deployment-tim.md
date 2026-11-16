@@ -372,7 +372,14 @@ istioctl analyze --context=ecommerce-abl -n ecommerce
 Gateway bersama berada di namespace istio-system, tempat Pod ingress berada.
 Route aplikasi berada di ecommerce dan merujuk `istio-system/ecommerce-gateway`.
 Route mempertahankan path `/api/v1/<resource>` tanpa rewrite dan hanya menerima
-path collection tepat atau detail dengan pemisah `/`. Host wildcard dan HTTP
+path collection tepat atau detail dengan pemisah `/`. Route Payment juga menerima
+exact `/api/v2/payments` dan prefix `/api/v2/payments/` menuju Service Payment
+yang sama, tanpa menghapus versi pada path. GET riwayat tersedia melalui
+`http://127.0.0.1:18080/api/v2/payments?orderId=1`; sesuaikan ID Order.
+POST, GET detail, dan PATCH Payment tersedia pada kedua versi, dengan format
+payload yang sama dan scope idempotency bersama. Image Payment yang berjalan
+harus sudah memuat adapter v2. Lihat [panduan Payment gateway](../deploy/README.md#payment-v1-dan-v2-melalui-gateway-yang-sama)
+untuk deployment, validasi, dan rollback route. Host wildcard dan HTTP
 dipakai untuk lab lokal ini; konfigurasi domain/TLS lingkungan lain perlu
 disesuaikan. Pola mengikuti [panduan ingress Istio](https://istio.io/latest/docs/tasks/traffic-management/ingress/ingress-control/).
 
