@@ -38,6 +38,27 @@ class ProductSchemaTest {
     @Autowired JdbcTemplate jdbc;
 
     @Test
+    void upgradingV2DataToDescriptionPreservesExistingRows() {
+        var old = Flyway.configure()
+                .dataSource(DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword())
+                .schemas("description_upgrade_test").target("2").load();
+        old.migrate();
+        jdbc.update("INSERT INTO description_upgrade_test.products(name,price,stock) VALUES ('Existing', 350000.125, 20)");
+        jdbc.update("INSERT INTO description_upgrade_test.products(name,price,stock,active) VALUES ('History', 1, 0, false)");
+        var latest = Flyway.configure()
+                .dataSource(DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword())
+                .schemas("description_upgrade_test").load();
+        latest.migrate();
+        latest.validate();
+        assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM description_upgrade_test.products WHERE description IS NULL", Integer.class));
+        assertEquals(Boolean.FALSE, jdbc.queryForObject("SELECT active FROM description_upgrade_test.products WHERE name='History'", Boolean.class));
+        assertEquals(0, new BigDecimal("350000.125").compareTo(jdbc.queryForObject(
+                "SELECT price FROM description_upgrade_test.products WHERE name='Existing'", BigDecimal.class)));
+        latest.migrate();
+        assertEquals("3", latest.info().current().getVersion().getVersion());
+    }
+
+    @Test
     void upgradingExistingProductsDefaultsThemToActive() throws Exception {
         var initial = Flyway.configure()
                 .dataSource(DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword())

@@ -4,7 +4,7 @@ Backend e-commerce untuk project mata kuliah **Arsitektur Berbasis Layanan**, ke
 
 Struktur kode dirancang untuk memisahkan model domain, koordinator use case, serta adapter HTTP dan database. Kontrak API menjadi acuan implementasi dan pengujian setiap service.
 
-**Status: Product selesai diverifikasi secara terisolasi; tiga service lain masih dalam pengembangan.** Product sudah memiliki enam endpoint, migrasi PostgreSQL, dan soft delete; `./mvnw -pl services/product-service -am verify` lulus 80 tests. Rincian dan batas bukti ada pada [hasil pengujian Product](docs/product-service-testing.md). Contoh alur lintas service di bawah tetap merupakan panduan, bukan hasil integrasi yang sudah lulus.
+**Product mendukung API V1 dan V2.** V2 menambahkan description, pencarian nama, paginasi opsional, serta X-Total-Count dengan kompatibilitas V1. Verifikasi Product pada 16 November 2026 lulus 119 tests, termasuk PostgreSQL dan upgrade migrasi. Lihat [panduan Product V2](docs/product-service-v2.md) dan [hasil pengujian Product](docs/product-service-testing.md). Kelulusan test Product tidak menyatakan seluruh service V2 atau deployment cluster terbaru telah diverifikasi.
 
 ## Daftar isi
 
@@ -30,7 +30,7 @@ Struktur kode dirancang untuk memisahkan model domain, koordinator use case, ser
 | Kategori | Teknologi | Status/dasar |
 |---|---|---|
 | Backend | Java 17, Spring Boot 4.1.2 | Baseline project; parent telah divalidasi |
-| API | REST, JSON, URL path versioning `/api/v1` dan `/api/v2` | Spesifikasi API; v2 belum diimplementasikan |
+| API | REST, JSON, URL path versioning `/api/v1` dan `/api/v2` | Product V1/V2 tersedia; lihat panduan dan bukti pengujian per service |
 | Dokumentasi API | OpenAPI 3.0.3, API versi 1.0.0 dan 2.0.0 | Spesifikasi API (DEC-020) |
 | Arsitektur internal | Domain, use case, ports/adapters | Rancangan internal |
 | Database | PostgreSQL 17, database terpisah per service | Pilihan rancangan; runtime belum dikonfirmasi |
@@ -56,7 +56,7 @@ Port berikut merupakan konfigurasi **development langsung pada host**, bukan sta
 
 Kontrak diperluas dari baseline 17 operasi pada 9 path melalui keputusan OPEN-001: POST `/api/v1/carts` membuat Cart kosong dengan ID dari backend. Penambahan kontrak belum membuktikan endpoint sudah diimplementasikan.
 
-Versi 2.0.0 (DEC-020–DEC-023) bersifat backward-compatible: seluruh operasi v1 tetap ada di `/api/v2` dengan arti yang sama, ditambah field opsional/baru dan empat operasi baru, yaitu GET `/orders?customerId=`, GET `/payments?orderId=`, DELETE `/carts/{cartId}/items`, dan POST `/orders/{orderId}/cancel`. GET `/products` mendapat query parameter opsional `name`, `page`, `size`. `/api/v1` tetap didukung. Kontrak v2 belum diimplementasikan.
+Versi 2.0.0 (DEC-020–DEC-023) bersifat backward-compatible: seluruh operasi v1 tetap ada di `/api/v2` dengan arti yang sama, ditambah field opsional/baru dan empat operasi baru, yaitu GET `/orders?customerId=`, GET `/payments?orderId=`, DELETE `/carts/{cartId}/items`, dan POST `/orders/{orderId}/cancel`. GET `/products` mendapat query parameter opsional `name`, `page`, `size`. `/api/v1` tetap didukung. Product V2 sudah diimplementasikan; status service lain diverifikasi oleh pemilik masing-masing.
 
 Base URL publik yang direncanakan adalah `http://localhost:8080/api/v1` dan `http://localhost:8080/api/v2` melalui pintu masuk API. Saat gateway belum berjalan, gunakan port service masing-masing. Dalam Kubernetes, aplikasi dapat memakai port container 8080 pada Pod berbeda.
 
@@ -248,7 +248,7 @@ URL client antarlayanan juga perlu dikonfigurasi pada consumer; lihat [konfigura
 | Versi | Prefix | Kontrak | Status |
 |---|---|---|---|
 | 1.0.0 | `/api/v1` | [specs/openapi.yaml](specs/openapi.yaml) | Diimplementasikan; dibekukan dan tetap didukung |
-| 2.0.0 | `/api/v2` | [specs/openapi-v2.yaml](specs/openapi-v2.yaml) | Kontrak ditulis; belum diimplementasikan |
+| 2.0.0 | `/api/v2` | [specs/openapi-v2.yaml](specs/openapi-v2.yaml) | Product sudah diimplementasikan dan diuji; lihat status tiap service |
 
 Buka file tersebut pada Swagger Editor/validator yang dipakai tim untuk memeriksa struktur endpoint dan schema. Ringkasan perubahan 1.0.0 → 2.0.0 ada pada `info.description` kontrak v2 dan [DEC-020–DEC-023](docs/decisions.md#dec-020-api-versi-200-dengan-url-path-versioning).
 
@@ -479,7 +479,7 @@ Contoh ID dan nominal pada panduan ini adalah ilustrasi. Sesuaikan dengan fixtur
 Empat Dockerfile tersedia pada tiap folder service dan Helm chart aplikasi di `deploy/helm/ecommerce/`. Command berikut sama pada Windows PowerShell dan Linux Bash, dari root repository dengan Docker Linux container engine aktif:
 
 ```console
-docker build -f services/product-service/Dockerfile -t ecommerce/product-service:0.1.1-local .
+docker build -f services/product-service/Dockerfile -t ecommerce/product-service:0.2.0-local .
 helm lint deploy/helm/ecommerce
 helm template abl deploy/helm/ecommerce --namespace ecommerce --output-dir rendered
 ```

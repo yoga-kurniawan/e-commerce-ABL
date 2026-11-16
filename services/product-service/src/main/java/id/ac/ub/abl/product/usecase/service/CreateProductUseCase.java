@@ -16,6 +16,6 @@ public class CreateProductUseCase {
 
     @Transactional
     public Product execute(CreateProductCommand command) {
-        return store.save(Product.create(command.name(), command.price(), command.stock()));
+        return store.save(Product.create(command.name(), command.price(), command.stock(), command.description()));
     }
 }

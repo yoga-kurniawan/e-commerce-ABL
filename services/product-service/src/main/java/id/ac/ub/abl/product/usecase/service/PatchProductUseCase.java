@@ -28,6 +28,9 @@ public class PatchProductUseCase {
                 command.name().supplied() ? command.name().value() : product.getName(),
                 command.price().supplied() ? command.price().value() : product.getPrice(),
                 command.stock().supplied() ? command.stock().value() : Integer.valueOf(product.getStock()));
+        if (command.description().supplied()) {
+            updated = updated.changeDescription(command.description().value());
+        }
         return store.save(updated);
     }
 }

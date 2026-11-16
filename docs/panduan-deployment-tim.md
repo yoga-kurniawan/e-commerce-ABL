@@ -218,7 +218,7 @@ mendukung NetworkPolicy; kindnet bawaan tidak menjamin enforcement tersebut.
 
 ```bash
 IMAGE_TAG=0.1.0-local
-if [ "$SERVICE" = product ]; then IMAGE_TAG=0.1.1-local; fi
+if [ "$SERVICE" = product ]; then IMAGE_TAG=0.2.0-local; fi
 docker build -f "services/${SERVICE}-service/Dockerfile" -t "ecommerce/${SERVICE}-service:${IMAGE_TAG}" .
 minikube -p ecommerce-abl image load "ecommerce/${SERVICE}-service:${IMAGE_TAG}"
 minikube -p ecommerce-abl image ls

@@ -19,6 +19,10 @@ public class ReplaceProductUseCase {
     public Product execute(ReplaceProductCommand command) {
         Product product = store.findById(command.productId())
                 .orElseThrow(() -> new ProductNotFoundException(command.productId()));
-        return store.save(product.replace(command.name(), command.price(), command.stock()));
+        Product updated = product.replace(command.name(), command.price(), command.stock());
+        if (command.description().supplied()) {
+            updated = updated.changeDescription(command.description().value());
+        }
+        return store.save(updated);
     }
 }

@@ -169,7 +169,7 @@ check_gateway() {
     sleep 1
   done
   [[ -n "$port" ]] || die 'Timeout menunggu port-forward gateway.'
-  for path in /api/v1/products; do
+  for path in /api/v1/products /api/v2/products; do
     status=$(curl --fail --show-error --silent --connect-timeout 5 --max-time 20 \
       --output "$work_dir/response.json" --write-out '%{http_code}' "http://127.0.0.1:$port$path")
     [[ "$status" == 200 ]] || die "GET $path: HTTP $status, diharapkan 200."
