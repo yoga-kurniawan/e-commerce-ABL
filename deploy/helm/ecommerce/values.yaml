@@ -15,7 +15,7 @@ services:
     enabled: true
     image:
       repository: ecommerce/product-service
-      tag: "0.1.0-local"
+      tag: "0.1.1-local"
       digest: ""
     database:
       host: product-db

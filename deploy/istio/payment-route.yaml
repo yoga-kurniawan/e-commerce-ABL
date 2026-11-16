@@ -1,0 +1,23 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: payment-route
+  namespace: ecommerce
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - istio-system/ecommerce-gateway
+  http:
+    - name: payment-api
+      match:
+        - uri:
+            exact: /api/v1/payments
+        - uri:
+            prefix: /api/v1/payments/
+      route:
+        - destination:
+            host: abl-payment-service.ecommerce.svc.cluster.local
+            port:
+              number: 8080
+      timeout: 15s

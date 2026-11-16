@@ -1,0 +1,16 @@
+# Shared ingress for the local Minikube lab. No application routes are implicit.
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: ecommerce-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"

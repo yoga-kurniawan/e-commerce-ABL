@@ -188,7 +188,7 @@ class ProductsApiControllerTest {
                 .andExpect(jsonPath("$.active").doesNotExist())
                 .andReturn();
         long id = json.readTree(result.getResponse().getContentAsString()).get("id").longValue();
-        assertEquals("http://localhost" + BASE + "/" + id, result.getResponse().getHeader("Location"));
+        assertEquals(BASE + "/" + id, result.getResponse().getHeader("Location"));
         return id;
     }
 }

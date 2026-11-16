@@ -56,8 +56,13 @@ class ProductApplicationTests {
         long id = product.get("id").longValue();
         String path = "/" + id;
         assertFalse(product.has("active"));
-        assertEquals("http://localhost:" + port + "/api/v1/products" + path,
-                created.headers().firstValue("Location").orElseThrow());
+        URI location = URI.create(created.headers().firstValue("Location").orElseThrow());
+        assertEquals("/api/v1/products" + path, location.toString());
+        var resolvedLocation = URI.create("http://localhost:" + port + "/api/v1/products").resolve(location);
+        var located = client.send(HttpRequest.newBuilder(resolvedLocation).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, located.statusCode());
+        assertEquals(id, json.readTree(located.body()).get("id").longValue());
 
         var detail = json.readTree(send(client, "GET", path, null, 200).body());
         assertEquals("Keyboard", detail.get("name").stringValue());

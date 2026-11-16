@@ -1,0 +1,23 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: order-route
+  namespace: ecommerce
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - istio-system/ecommerce-gateway
+  http:
+    - name: order-api
+      match:
+        - uri:
+            exact: /api/v1/orders
+        - uri:
+            prefix: /api/v1/orders/
+      route:
+        - destination:
+            host: abl-order-service.ecommerce.svc.cluster.local
+            port:
+              number: 8080
+      timeout: 15s

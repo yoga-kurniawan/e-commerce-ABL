@@ -14,7 +14,7 @@ import id.ac.ub.abl.product.usecase.service.PatchProductUseCase;
 import id.ac.ub.abl.product.usecase.service.ReplaceProductUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @RestController
 public class ProductsApiController implements ProductsApi {
@@ -52,8 +52,9 @@ public class ProductsApiController implements ProductsApi {
     @Override
     public ResponseEntity<ProductOutput> createProduct(ProductInput input) {
         var output = mapper.toOutput(create.execute(mapper.toCreateCommand(input)));
-        var location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{productId}").buildAndExpand(output.id()).toUri();
+        // Resolve against the client's origin, including its public gateway port.
+        var location = UriComponentsBuilder.fromPath("/api/v1/products/{productId}")
+                .buildAndExpand(output.id()).toUri();
         return ResponseEntity.created(location).body(output);
     }
 
