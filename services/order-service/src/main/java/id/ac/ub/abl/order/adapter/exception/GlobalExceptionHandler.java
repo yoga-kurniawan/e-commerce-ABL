@@ -7,7 +7,9 @@ import id.ac.ub.abl.order.usecase.exception.CartOwnershipMismatchException;
 import id.ac.ub.abl.order.usecase.exception.CartServiceUnavailableException;
 import id.ac.ub.abl.order.usecase.exception.EmptyCartException;
 import id.ac.ub.abl.order.usecase.exception.InsufficientStockException;
+import id.ac.ub.abl.order.usecase.exception.OrderCancellationConflictException;
 import id.ac.ub.abl.order.usecase.exception.OrderNotFoundException;
+import id.ac.ub.abl.order.usecase.exception.PaymentServiceUnavailableException;
 import id.ac.ub.abl.order.usecase.exception.ProductServiceUnavailableException;
 import id.ac.ub.abl.order.usecase.exception.ProductUnavailableException;
 import org.slf4j.Logger;
@@ -40,7 +42,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler({EmptyCartException.class, CartOwnershipMismatchException.class,
             ProductUnavailableException.class, InsufficientStockException.class,
-            OrderNotModifiableException.class})
+            OrderNotModifiableException.class, OrderCancellationConflictException.class})
     public ResponseEntity<ApiError> conflict(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiError("CONFLICT", exception.getMessage()));
@@ -56,6 +58,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         LOG.error("Layanan Cart tidak tersedia", exception);
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(new ApiError("SERVICE_UNAVAILABLE", "Layanan keranjang tidak dapat dihubungi"));
+    }
+
+    @ExceptionHandler(PaymentServiceUnavailableException.class)
+    public ResponseEntity<ApiError> paymentServiceUnavailable(PaymentServiceUnavailableException exception) {
+        LOG.error("Layanan Payment tidak tersedia", exception);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiError("SERVICE_UNAVAILABLE", "Layanan pembayaran tidak dapat dihubungi"));
     }
 
     @ExceptionHandler(ProductServiceUnavailableException.class)

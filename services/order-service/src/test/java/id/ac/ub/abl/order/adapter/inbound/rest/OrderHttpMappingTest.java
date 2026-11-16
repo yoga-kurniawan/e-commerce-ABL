@@ -6,6 +6,8 @@ import java.util.List;
 import id.ac.ub.abl.order.adapter.inbound.rest.dto.OrderInput;
 import id.ac.ub.abl.order.adapter.inbound.rest.dto.OrderOutput;
 import id.ac.ub.abl.order.adapter.inbound.rest.dto.OrderPatchInput;
+import id.ac.ub.abl.order.adapter.inbound.rest.dto.v2.OrderItemOutputV2;
+import id.ac.ub.abl.order.adapter.inbound.rest.dto.v2.OrderOutputV2;
 import id.ac.ub.abl.order.adapter.inbound.rest.mapper.OrderHttpMapper;
 import id.ac.ub.abl.order.domain.Order;
 import id.ac.ub.abl.order.domain.OrderItem;
@@ -83,6 +85,22 @@ class OrderHttpMappingTest {
         assertEquals(5, node.size());
         assertTrue(node.has("shippingAddress"));
         assertFalse(node.has("items"));
+        assertFalse(node.has("cartId"));
+    }
+
+    @Test
+    void outputV2AddsItemSnapshotsToV1Fields() {
+        Order order = Order.restore(501L, 101L, 10L, OrderStatus.PENDING, "Jl. Veteran",
+                List.of(OrderItem.create(1L, "Keyboard", 2, new BigDecimal("350000"))));
+
+        OrderOutputV2 output = mapper.toOutputV2(order);
+        assertEquals(new OrderOutputV2(501L, 101L, new BigDecimal("700000"), "PENDING", "Jl. Veteran",
+                List.of(new OrderItemOutputV2(1L, "Keyboard", 2, new BigDecimal("350000"), new BigDecimal("700000")))),
+                output);
+
+        var node = json.readTree(json.writeValueAsString(output));
+        assertEquals(6, node.size());
+        assertEquals(5, node.get("items").get(0).size());
         assertFalse(node.has("cartId"));
     }
 }

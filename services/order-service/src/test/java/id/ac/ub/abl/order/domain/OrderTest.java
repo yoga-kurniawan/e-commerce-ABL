@@ -113,4 +113,28 @@ class OrderTest {
         assertThrows(DomainRuleViolation.class, () -> new ProductSnapshot(1L, "X", new BigDecimal("-1"), 1));
         assertThrows(DomainRuleViolation.class, () -> new ProductSnapshot(1L, "X", BigDecimal.ONE, -1));
     }
+
+    @Test
+    void cancelMovesPendingToCancelledAndKeepsSnapshot() {
+        Order pending = Order.restore(501L, 101L, 10L, OrderStatus.PENDING, "Jl. Veteran", List.of(KEYBOARD, MOUSE));
+
+        Order cancelled = pending.cancel();
+
+        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
+        assertEquals(501L, cancelled.getId());
+        assertEquals("Jl. Veteran", cancelled.getShippingAddress());
+        assertEquals(pending.getItems(), cancelled.getItems());
+        assertEquals(0, pending.getTotal().compareTo(cancelled.getTotal()));
+        assertEquals(OrderStatus.PENDING, pending.getStatus());
+    }
+
+    @Test
+    void cancelIsIdempotentForCancelledAndRejectsConfirmed() {
+        Order cancelled = Order.restore(501L, 101L, 10L, OrderStatus.CANCELLED, null, List.of(KEYBOARD));
+        Order confirmed = Order.restore(502L, 101L, 10L, OrderStatus.CONFIRMED, null, List.of(KEYBOARD));
+
+        assertSame(cancelled, cancelled.cancel());
+        OrderNotModifiableException error = assertThrows(OrderNotModifiableException.class, confirmed::cancel);
+        assertEquals("Pesanan berstatus CONFIRMED tidak dapat dibatalkan", error.getMessage());
+    }
 }
