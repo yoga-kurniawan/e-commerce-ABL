@@ -137,3 +137,49 @@ minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply \
 Route Product mempertahankan path V1 sekaligus menambahkan path V2, tanpa rewrite.
 Periksa rollout, log migrasi V3, analisis Istio, serta GET/POST melalui gateway.
 Deployment runtime V2 harus diverifikasi terpisah dari kelulusan test otomatis.
+
+## Hasil deployment pada 16 November 2026
+
+Product V2 berhasil dipasang dan diuji pada cluster lokal yang sebelumnya
+menjalankan Product V1. Konfigurasi release lama dipertahankan saat upgrade;
+Secret, StatefulSet database, dan PVC tidak diganti atau dihapus.
+
+| Pemeriksaan | Hasil aktual |
+|---|---|
+| Cluster / namespace / release | ecommerce-abl / ecommerce / abl |
+| Helm | Revision 3, deployed, chart ecommerce-0.2.0 |
+| Image aplikasi | ecommerce/product-service:0.2.0-local |
+| Pod Product | 2/2 Running, aplikasi dan sidecar siap |
+| Pod PostgreSQL | 1/1 Running, memakai PVC sebelumnya |
+| Flyway | Upgrade dari skema versi 2 ke 3; versi 1, 2, dan 3 tercatat success |
+| Istio analyze | No validation issues found pada namespace ecommerce |
+| Proxy Istio | Product dan ingress terdaftar pada Istiod 1.31.0, subscribed CDS/LDS/EDS/RDS |
+| Request gateway | 31 request HTTP dengan assertion status, header, dan body berhasil |
+
+Pengujian memakai port-forward sementara ke Service ingress pada port lokal
+acak; seluruh response yang diuji memuat `server: istio-envoy`. Cakupan meliputi
+POST/GET/PUT/PATCH/DELETE V2, Location relatif, description null/absent,
+PUT dan PATCH V1 mempertahankan description, filter nama case-insensitive,
+paginasi dan X-Total-Count, page besar, error 400/404, dan soft delete.
+Request melalui port-forward ingress ini membuktikan routing Envoy ke Product,
+bukan pengujian endpoint LoadBalancer eksternal atau TLS.
+
+Product lama ID 1–3 tetap aktif dengan data respons V1 yang tidak berubah.
+Setelah migrasi, description ketiganya null. Product uji ID 4–6 dinonaktifkan
+melalui API DELETE setelah verifikasi; baris historisnya tetap ada. ID 4 tetap
+menyimpan description historis setelah soft delete. Katalog aktif kembali hanya
+memuat tiga product lama. Port-forward sementara pengujian dihentikan setelah
+selesai; untuk mengakses dari terminal sendiri jalankan:
+
+```bash
+bash scripts/deploy-local.sh gateway
+```
+
+Di terminal terpisah:
+
+```bash
+curl -i http://127.0.0.1:18080/api/v2/products
+```
+
+Hasil runtime ini khusus Product. Tidak ada deployment atau pengujian runtime
+V2 Cart, Order, maupun Payment yang dilakukan pada tahap ini.
