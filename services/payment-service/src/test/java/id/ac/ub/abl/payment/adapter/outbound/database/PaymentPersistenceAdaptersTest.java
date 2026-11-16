@@ -10,6 +10,8 @@ import id.ac.ub.abl.payment.usecase.exception.PaymentOperationException;
 import id.ac.ub.abl.payment.usecase.port.out.CreationResponseEncoder;
 import id.ac.ub.abl.payment.adapter.outbound.database.mapper.PaymentPersistenceMapper;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -56,6 +58,82 @@ class PaymentPersistenceAdaptersTest {
     @BeforeEach void reset() {
         jdbc.execute("TRUNCATE payment_idempotency, payments, payment_order_guards");
         encoder.action = () -> { };
+    }
+    @ParameterizedTest
+    @EnumSource(value = PaymentStatus.class, names = {"PENDING", "SUCCESS"})
+    void findByOrderId_whenHistoryExists_shouldMapOrderedDomainPaymentsWithoutMutation(PaymentStatus latestStatus) {
+        seedHistoryPayment(9403L, 501L, latestStatus, "  history ref  ");
+        seedHistoryPayment(9400L, 502L, PaymentStatus.PENDING, null);
+        seedHistoryPayment(9401L, 501L, PaymentStatus.FAILED, null);
+        seedHistoryPayment(9402L, 501L, PaymentStatus.FAILED, "failed-ref");
+        var before = jdbc.queryForList("SELECT * FROM payments ORDER BY id");
+
+        var history = payments.findByOrderId(501L);
+
+        assertThat(history).extracting(Payment::getId, Payment::getStatus, Payment::getTransactionReference)
+                .containsExactly(tuple(9401L, PaymentStatus.FAILED, null),
+                        tuple(9402L, PaymentStatus.FAILED, "failed-ref"), tuple(9403L, latestStatus, "  history ref  "));
+        assertThat(history).allSatisfy(payment -> {
+            assertThat(payment.getOrderId()).isEqualTo(501L);
+            assertThat(payment.getMethod()).isEqualTo(PaymentMethod.TRANSFER);
+            assertThat(payment.getAmount()).isEqualTo(new BigDecimal("350000.12500"));
+        });
+        assertThat(jdbc.queryForList("SELECT * FROM payments ORDER BY id")).isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment_order_guards", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM payment_idempotency", Integer.class)).isZero();
+    }
+    @Test void findByOrderId_whenOrderHasNoPayments_shouldReturnEmptyDomainList() {
+        seedHistoryPayment(9501L, 501L, PaymentStatus.PENDING, null);
+
+        assertThat(payments.findByOrderId(999L)).isEmpty();
+    }
+    @Test void findByOrderId_whenGuardAndPaymentRowLocked_shouldReadCommittedStateWithoutLocking() throws Exception {
+        var payment = creation.commit(claim(request("history-lock", 501L)), order(501L)).payment();
+        var entered = new CountDownLatch(1); var release = new CountDownLatch(1);
+        var pool = Executors.newSingleThreadExecutor();
+        try {
+            var holder = pool.submit(() -> new PaymentTransactions(transactionManager, session, 250, 30000)
+                    .run("PAYMENT_OPERATION_BUSY", () -> {
+                        guardsRepository.findByOrderIdForUpdate(501L).orElseThrow();
+                        paymentsRepository.findByIdForUpdate(payment.getId()).orElseThrow();
+                        entered.countDown(); await(release); return true;
+                    }));
+            await(entered);
+
+            assertThat(payments.findByOrderId(501L)).extracting(Payment::getId).containsExactly(payment.getId());
+
+            release.countDown(); holder.get(10, TimeUnit.SECONDS);
+            assertThat(payments.findById(payment.getId())).hasValueSatisfying(found ->
+                    assertThat(found).usingRecursiveComparison().isEqualTo(payment));
+        } finally { release.countDown(); pool.shutdownNow(); }
+    }
+    @Test void findByOrderId_whenQueryFails_shouldMapDatabaseFailureToDependencyUnavailable() {
+        jdbc.execute("ALTER TABLE payments RENAME TO payments_history_unavailable");
+        try {
+            assertThatThrownBy(() -> payments.findByOrderId(501L))
+                    .satisfies(error -> code(error, "DEPENDENCY_UNAVAILABLE"));
+        } finally {
+            jdbc.execute("ALTER TABLE payments_history_unavailable RENAME TO payments");
+        }
+        assertThat(payments.findByOrderId(501L)).isEmpty();
+    }
+    @Test void findByOrderId_whenTableLockTimesOut_shouldMapToDependencyUnavailableInsteadOfMutationConflict() throws Exception {
+        var entered = new CountDownLatch(1); var release = new CountDownLatch(1);
+        var pool = Executors.newSingleThreadExecutor();
+        try {
+            var holder = pool.submit(() -> new PaymentTransactions(transactionManager, session, 250, 30000)
+                    .run("PAYMENT_OPERATION_BUSY", () -> {
+                        jdbc.execute("LOCK TABLE payments IN ACCESS EXCLUSIVE MODE");
+                        entered.countDown(); await(release); return true;
+                    }));
+            await(entered);
+
+            assertThatThrownBy(() -> payments.findByOrderId(501L))
+                    .satisfies(error -> code(error, "DEPENDENCY_UNAVAILABLE"));
+
+            release.countDown(); holder.get(10, TimeUnit.SECONDS);
+        } finally { release.countDown(); pool.shutdownNow(); }
+        assertThat(payments.findByOrderId(501L)).isEmpty();
     }
     @Test void createAndReplay_whenStatusChanges_shouldPreserveInitialBodyAndExactAmount() {
         var request = request("replay", 501L);
@@ -250,6 +328,10 @@ class PaymentPersistenceAdaptersTest {
         assertThat(keys.inspect(request)).isInstanceOf(IdempotencyLookupResult.Completed.class);
         assertThat(keys.claim(request)).isInstanceOf(IdempotencyClaimResult.Replayed.class);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM payments", Integer.class)).isEqualTo(1);
+    }
+    private void seedHistoryPayment(Long id, Long orderId, PaymentStatus status, String reference) {
+        jdbc.update("INSERT INTO payments (id, order_id, method, status, amount, transaction_reference) VALUES (?, ?, 'TRANSFER', ?, ?, ?)",
+                id, orderId, status.name(), new BigDecimal("350000.12500"), reference);
     }
     private IdempotencyClaim claim(CreatePaymentCommand request) { return ((IdempotencyClaimResult.Claimed) keys.claim(request)).claim(); }
     private CreatePaymentCommand request(String key, Long order) { return new CreatePaymentCommand(order, PaymentMethod.COD, new IdempotencyKey(key)); }

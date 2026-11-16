@@ -1,6 +1,7 @@
 package id.ac.ub.abl.payment.usecase.service;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import id.ac.ub.abl.payment.domain.*;
 import id.ac.ub.abl.payment.domain.exception.*;
@@ -57,6 +58,9 @@ class PaymentMutationUseCasesTest {
         Payment payment = Payment.restore(1L, 501L, PaymentMethod.COD, new BigDecimal("350000.12500"), PaymentStatus.PENDING, null);
         int effects;
         public Optional<Payment> findById(Long id) { return id.equals(payment.getId()) ? Optional.of(payment) : Optional.empty(); }
+        public List<Payment> findByOrderId(Long orderId) {
+            return payment.getOrderId().equals(orderId) ? List.of(payment) : List.of();
+        }
         Payment required(Long id) { return findById(id).orElseThrow(() -> new PaymentOperationException("NOT_FOUND", "missing")); }
         public Payment changeReference(PatchPaymentCommand command) {
             payment = required(command.paymentId()).changeReference(command.transactionReference()); effects++; return payment;

@@ -1,5 +1,6 @@
 package id.ac.ub.abl.payment.adapter.outbound.database;
 
+import java.util.List;
 import java.util.Optional;
 
 import id.ac.ub.abl.payment.adapter.outbound.database.entity.PaymentJpaEntity;
@@ -14,6 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface PaymentsRepository extends JpaRepository<PaymentJpaEntity, Long> {
     boolean existsByOrderIdAndStatus(Long orderId, PaymentStatus status);
+
+    /** Seluruh attempt untuk satu Order, termasuk FAILED, diurutkan berdasarkan ID menaik. */
+    List<PaymentJpaEntity> findByOrderIdOrderByIdAsc(Long orderId);
 
     /** Partial unique index membatasi hasil menjadi maksimum satu baris. Caller memegang guard Order. */
     @Query("select p from PaymentJpaEntity p where p.orderId = :orderId and p.status in (" +

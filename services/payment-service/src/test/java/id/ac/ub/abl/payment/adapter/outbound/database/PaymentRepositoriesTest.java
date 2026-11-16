@@ -14,6 +14,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
@@ -94,6 +95,58 @@ class PaymentRepositoriesTest {
             assertThat(payments.findBlockingAttempt(501L)).hasValueSatisfying(found ->
                     assertThat(found.getStatus()).isEqualTo(PaymentStatus.SUCCESS));
         });
+    }
+
+    @Test
+    void paymentHistory_whenOrdersAreInterleaved_shouldFilterOrderAndSortByIdAscending() {
+        // Insert IDs out of order so insertion order is not the expected history order.
+        seedHistoryPayment(9103L, 501L, PaymentStatus.FAILED);
+        seedHistoryPayment(9100L, 502L, PaymentStatus.SUCCESS);
+        seedHistoryPayment(9101L, 501L, PaymentStatus.FAILED);
+        seedHistoryPayment(9104L, 502L, PaymentStatus.FAILED);
+        seedHistoryPayment(9102L, 501L, PaymentStatus.FAILED);
+
+        transactions().executeWithoutResult(tx -> {
+            entityManager.clear();
+            var history = payments.findByOrderIdOrderByIdAsc(501L);
+
+            assertThat(history).extracting(PaymentJpaEntity::getId)
+                    .containsExactly(9101L, 9102L, 9103L);
+            assertThat(history).extracting(PaymentJpaEntity::getOrderId).containsOnly(501L);
+            assertThat(payments.findByOrderIdOrderByIdAsc(502L))
+                    .extracting(PaymentJpaEntity::getId).containsExactly(9100L, 9104L);
+        });
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = PaymentStatus.class, names = {"PENDING", "SUCCESS"})
+    void paymentHistory_whenFailedAttemptsAndLatestAttemptExist_shouldIncludeEveryStatus(PaymentStatus latestStatus) {
+        // A single Order may have many FAILED attempts and one PENDING or SUCCESS.
+        seedHistoryPayment(9203L, 501L, latestStatus);
+        seedHistoryPayment(9201L, 501L, PaymentStatus.FAILED);
+        seedHistoryPayment(9202L, 501L, PaymentStatus.FAILED);
+
+        transactions().executeWithoutResult(tx -> {
+            entityManager.clear();
+            var history = payments.findByOrderIdOrderByIdAsc(501L);
+
+            assertThat(history).extracting(PaymentJpaEntity::getId)
+                    .containsExactly(9201L, 9202L, 9203L);
+            assertThat(history).extracting(PaymentJpaEntity::getStatus)
+                    .containsExactly(PaymentStatus.FAILED, PaymentStatus.FAILED, latestStatus);
+            assertThat(history).allSatisfy(payment -> {
+                assertThat(payment.getOrderId()).isEqualTo(501L);
+                assertThat(payment.getAmount()).isEqualByComparingTo("350000.12500");
+            });
+        });
+    }
+
+    @Test
+    void paymentHistory_whenOrderHasNoPayments_shouldReturnEmptyList() {
+        seedHistoryPayment(9301L, 501L, PaymentStatus.PENDING);
+
+        transactions().executeWithoutResult(tx ->
+                assertThat(payments.findByOrderIdOrderByIdAsc(999L)).isEmpty());
     }
 
     @Test
@@ -253,6 +306,11 @@ class PaymentRepositoriesTest {
             case "idempotency" -> idempotency.findByIdForUpdate(key("locked")).orElseThrow();
             default -> throw new IllegalArgumentException(resource);
         }
+    }
+
+    private void seedHistoryPayment(Long id, Long orderId, PaymentStatus status) {
+        jdbc.update("INSERT INTO payments (id, order_id, method, status, amount) VALUES (?, ?, 'COD', ?, ?)",
+                id, orderId, status.name(), new BigDecimal("350000.12500"));
     }
 
     private TransactionTemplate transactions() { return new TransactionTemplate(transactionManager); }

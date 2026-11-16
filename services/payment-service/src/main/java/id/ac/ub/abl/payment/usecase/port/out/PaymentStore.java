@@ -1,5 +1,6 @@
 package id.ac.ub.abl.payment.usecase.port.out;
 
+import java.util.List;
 import java.util.Optional;
 import id.ac.ub.abl.payment.domain.Payment;
 import id.ac.ub.abl.payment.usecase.command.ApplyPaymentResultCommand;
@@ -8,6 +9,9 @@ import id.ac.ub.abl.payment.usecase.command.PatchPaymentCommand;
 /** Kebutuhan persistence aggregate; bukan repository JPA. */
 public interface PaymentStore {
     Optional<Payment> findById(Long paymentId);
+
+    /** Seluruh attempt milik Order, urut ID menaik; kosong jika belum ada Payment. */
+    List<Payment> findByOrderId(Long orderId);
 
     /** Transaksi lokal: lock guard lalu Payment, baca ulang state/version, simpan perubahan. */
     Payment changeReference(PatchPaymentCommand command);
