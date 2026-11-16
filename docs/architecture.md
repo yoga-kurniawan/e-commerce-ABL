@@ -136,7 +136,8 @@ ABL-Project/
 │   ├── cart-service/
 │   ├── order-service/
 │   └── payment-service/
-├── specs/openapi.yaml               # Kontrak publik gabungan
+├── specs/openapi.yaml               # Kontrak publik v1 (1.0.0)
+├── specs/openapi-v2.yaml            # Kontrak publik v2 (2.0.0, DEC-020)
 ├── docs/                           # Dokumentasi desain/development/tests
 ├── deploy/                         # Manifests/chart, ditulis saat deployment
 ├── scripts/                        # Otomatisasi sesuai kebutuhan
@@ -298,6 +299,7 @@ Lifeline ProductStore menunjukkan dispatch melalui interface, bukan proses/serve
 | Buat Cart | CreateCart → simpan Cart kosong → kembalikan ID backend | Kepemilikan, satu/beberapa Cart aktif, lifecycle |
 | Tambah item Cart | Load Cart → ProductLookup → domain.addItem → save Cart | Quantity duplikat ditambah; harga awal disimpan; harga saat penambahan ulang dan stok/state masih terbuka |
 | Buat Order | CartLookup → ProductLookup untuk data/validasi bila diperlukan → snapshot/total memakai harga Cart → save Order dan item | Transport harga satuan, masa berlaku harga, Cart kosong/ownership, reservation |
+| Batalkan Order (v2) | Load Order → PaymentLookup GET `/api/v2/payments?orderId=` → domain.cancel → save Order | Race dengan create Payment bersamaan; dependency dua arah Order ↔ Payment (DEC-023) |
 | Buat Payment | OrderLookup → cek kelayakan → create Payment → save | Status awal, payment attempts, idempotency, verifikasi final |
 
 ## Pola desain
@@ -415,7 +417,7 @@ Tujuan tersebut perlu dibuktikan oleh tests dan praktik pengembangan, bukan disi
 
 ## Batas implementasi
 
-Kontrak publik project terdiri dari 18 operasi pada 10 path dan tersedia pada [OpenAPI](../specs/openapi.yaml). Baseline sumber memuat 17 operasi pada 9 path; OPEN-001 B menambahkan POST `/carts` untuk membuat Cart kosong dengan ID backend. Detail request awal memakai customerId sebagai referensi, tanpa menganggap autentikasi/otorisasi sudah tersedia.
+Kontrak publik v1 terdiri dari 18 operasi pada 10 path dan tersedia pada [OpenAPI v1](../specs/openapi.yaml). Kontrak v2 yang backward-compatible memuat 22 operasi pada 11 path pada [OpenAPI v2](../specs/openapi-v2.yaml) dengan prefix `/api/v2` (DEC-020); v2 belum diimplementasikan. Implementasi v2 membutuhkan controller per versi, sedangkan domain/use case dipakai bersama dan mapper output menjaga respons v1 tetap tanpa field baru. Baseline sumber memuat 17 operasi pada 9 path; OPEN-001 B menambahkan POST `/carts` untuk membuat Cart kosong dengan ID backend. Detail request awal memakai customerId sebagai referensi, tanpa menganggap autentikasi/otorisasi sudah tersedia.
 
 Pembuatan Cart melalui endpoint khusus, penambahan quantity duplikat, dan harga saat masuk Cart telah dipilih. Bagian yang masih perlu ditetapkan meliputi kepemilikan/lifecycle Cart, transisi state, masa berlaku harga, harga saat penambahan ulang, policy snapshot, idempotency, dan integrasi provider pembayaran. Beberapa schema respons tambahan juga masih perlu dilengkapi; rinciannya ada pada [business-rules.md](business-rules.md).
 
