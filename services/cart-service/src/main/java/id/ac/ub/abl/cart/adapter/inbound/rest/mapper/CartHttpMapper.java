@@ -16,6 +16,9 @@ import id.ac.ub.abl.cart.usecase.command.CreateCartCommand;
 import id.ac.ub.abl.cart.usecase.command.PatchCartItemCommand;
 import id.ac.ub.abl.cart.usecase.command.PatchField;
 import id.ac.ub.abl.cart.usecase.command.ReplaceCartItemCommand;
+import id.ac.ub.abl.cart.adapter.inbound.rest.dto.v2.CartItemOutputV2;
+import id.ac.ub.abl.cart.adapter.inbound.rest.dto.v2.CartOutputV2;
+import id.ac.ub.abl.cart.adapter.inbound.rest.dto.v2.UpdatedCartItemOutputV2;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -52,4 +55,20 @@ public class CartHttpMapper {
     public UpdatedCartItemOutput toUpdatedItemOutput(Long cartId, CartItem item) {
         return new UpdatedCartItemOutput(cartId, item.getProductId(), item.getQuantity(), item.getSubtotal());
     }
+
+    public CartItemOutputV2 toItemOutputV2(CartItem item) {
+        return new CartItemOutputV2(item.getProductId(), item.getQuantity(), item.getUnitPrice(), item.getSubtotal());
+    }
+
+    public CartOutputV2 toOutputV2(Cart cart) {
+        List<CartItemOutputV2> items = cart.getItems().stream()
+                .map(this::toItemOutputV2)
+                .toList();
+        return new CartOutputV2(cart.getId(), cart.getCustomerId(), items, cart.getTotal());
+    }
+
+    public UpdatedCartItemOutputV2 toUpdatedItemOutputV2(Long cartId, CartItem item) {
+        return new UpdatedCartItemOutputV2(cartId, item.getProductId(), item.getQuantity(), item.getUnitPrice(), item.getSubtotal());
+    }
+b
 }
