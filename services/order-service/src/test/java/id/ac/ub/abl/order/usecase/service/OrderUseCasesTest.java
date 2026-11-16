@@ -1,6 +1,8 @@
 package id.ac.ub.abl.order.usecase.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +13,7 @@ import id.ac.ub.abl.order.domain.CartSnapshot;
 import id.ac.ub.abl.order.domain.Order;
 import id.ac.ub.abl.order.domain.OrderItem;
 import id.ac.ub.abl.order.domain.OrderStatus;
+import id.ac.ub.abl.order.domain.PaymentSnapshot;
 import id.ac.ub.abl.order.domain.ProductSnapshot;
 import id.ac.ub.abl.order.domain.exception.DomainRuleViolation;
 import id.ac.ub.abl.order.domain.exception.OrderNotModifiableException;
@@ -21,11 +24,14 @@ import id.ac.ub.abl.order.usecase.exception.CartNotFoundException;
 import id.ac.ub.abl.order.usecase.exception.CartOwnershipMismatchException;
 import id.ac.ub.abl.order.usecase.exception.EmptyCartException;
 import id.ac.ub.abl.order.usecase.exception.InsufficientStockException;
+import id.ac.ub.abl.order.usecase.exception.OrderCancellationConflictException;
 import id.ac.ub.abl.order.usecase.exception.OrderNotFoundException;
+import id.ac.ub.abl.order.usecase.exception.PaymentServiceUnavailableException;
 import id.ac.ub.abl.order.usecase.exception.ProductServiceUnavailableException;
 import id.ac.ub.abl.order.usecase.exception.ProductUnavailableException;
 import id.ac.ub.abl.order.usecase.port.out.CartLookup;
 import id.ac.ub.abl.order.usecase.port.out.OrderStore;
+import id.ac.ub.abl.order.usecase.port.out.PaymentLookup;
 import id.ac.ub.abl.order.usecase.port.out.ProductLookup;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -179,6 +185,100 @@ class OrderUseCasesTest {
         assertNull(orderStore.findById(saved.getId()).orElseThrow().getShippingAddress());
     }
 
+    @Test
+    void listOrders_returnsOnlyCustomerOrdersNewestFirst() {
+        ListOrdersUseCase listOrders = new ListOrdersUseCase(orderStore);
+        Order first = orderStore.save(sampleOrder(OrderStatus.PENDING));
+        Order second = orderStore.save(sampleOrder(OrderStatus.PENDING));
+        orderStore.save(Order.place(202L, 20L, first.getItems()));
+
+        assertEquals(List.of(second.getId(), first.getId()),
+                listOrders.execute(101L).stream().map(Order::getId).toList());
+        assertTrue(listOrders.execute(303L).isEmpty());
+    }
+
+    private CancelOrderUseCase cancelWith(PaymentLookup payments) {
+        return new CancelOrderUseCase(orderStore, payments);
+    }
+
+    private static PaymentLookup payments(PaymentSnapshot.Status... statuses) {
+        return orderId -> {
+            List<PaymentSnapshot> result = new ArrayList<>();
+            for (int i = 0; i < statuses.length; i++) {
+                result.add(new PaymentSnapshot(9000L + i, orderId, statuses[i]));
+            }
+            return result;
+        };
+    }
+
+    @Test
+    void cancelOrder_pendingWithoutActivePayment_savesCancelled() {
+        Order saved = orderStore.save(sampleOrder(OrderStatus.PENDING));
+        int savesBefore = orderStore.saves;
+
+        Order cancelled = cancelWith(payments(PaymentSnapshot.Status.FAILED)).execute(saved.getId());
+
+        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
+        assertEquals(OrderStatus.CANCELLED, orderStore.findById(saved.getId()).orElseThrow().getStatus());
+        assertEquals(savesBefore + 1, orderStore.saves);
+        assertEquals(OrderStatus.CANCELLED, cancelWith(payments()).execute(
+                orderStore.save(sampleOrder(OrderStatus.PENDING)).getId()).getStatus());
+    }
+
+    @Test
+    void cancelOrder_alreadyCancelled_returnsWithoutPaymentLookupOrSave() {
+        Order saved = orderStore.save(sampleOrder(OrderStatus.CANCELLED));
+        int savesBefore = orderStore.saves;
+        PaymentLookup failIfCalled = orderId -> { throw new AssertionError("Payment tidak boleh dipanggil"); };
+
+        assertEquals(OrderStatus.CANCELLED, cancelWith(failIfCalled).execute(saved.getId()).getStatus());
+        assertEquals(savesBefore, orderStore.saves);
+    }
+
+    @Test
+    void cancelOrder_confirmed_rejectsBeforePaymentLookup() {
+        Order saved = orderStore.save(sampleOrder(OrderStatus.CONFIRMED));
+        PaymentLookup failIfCalled = orderId -> { throw new AssertionError("Payment tidak boleh dipanggil"); };
+
+        assertThrows(OrderNotModifiableException.class, () -> cancelWith(failIfCalled).execute(saved.getId()));
+        assertEquals(OrderStatus.CONFIRMED, orderStore.findById(saved.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void cancelOrder_withPendingOrSuccessPayment_rejectsWithoutSaving() {
+        Order saved = orderStore.save(sampleOrder(OrderStatus.PENDING));
+        int savesBefore = orderStore.saves;
+
+        OrderCancellationConflictException pending = assertThrows(OrderCancellationConflictException.class,
+                () -> cancelWith(payments(PaymentSnapshot.Status.FAILED, PaymentSnapshot.Status.PENDING))
+                        .execute(saved.getId()));
+        OrderCancellationConflictException success = assertThrows(OrderCancellationConflictException.class,
+                () -> cancelWith(payments(PaymentSnapshot.Status.SUCCESS)).execute(saved.getId()));
+
+        assertEquals("Pesanan masih memiliki pembayaran PENDING", pending.getMessage());
+        assertEquals("Pesanan sudah memiliki pembayaran SUCCESS", success.getMessage());
+        assertEquals(savesBefore, orderStore.saves);
+        assertEquals(OrderStatus.PENDING, orderStore.findById(saved.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void cancelOrder_whenPaymentUnavailable_propagatesWithoutSaving() {
+        Order saved = orderStore.save(sampleOrder(OrderStatus.PENDING));
+        int savesBefore = orderStore.saves;
+        PaymentLookup down = orderId -> {
+            throw new PaymentServiceUnavailableException("down", new RuntimeException());
+        };
+
+        assertThrows(PaymentServiceUnavailableException.class, () -> cancelWith(down).execute(saved.getId()));
+        assertEquals(savesBefore, orderStore.saves);
+        assertEquals(OrderStatus.PENDING, orderStore.findById(saved.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void cancelOrder_unknownOrder_throwsNotFound() {
+        assertThrows(OrderNotFoundException.class, () -> cancelWith(payments()).execute(999L));
+    }
+
     private static Order sampleOrder(OrderStatus status) {
         Order placed = Order.place(101L, 10L, List.of(OrderItem.create(1L, "Keyboard", 1, new BigDecimal("350000"))));
         return status == OrderStatus.PENDING ? placed
@@ -203,6 +303,14 @@ class OrderUseCasesTest {
         @Override
         public Optional<Order> findById(Long orderId) {
             return Optional.ofNullable(orders.get(orderId));
+        }
+
+        @Override
+        public List<Order> findByCustomerId(Long customerId) {
+            return orders.values().stream()
+                    .filter(order -> order.getCustomerId().equals(customerId))
+                    .sorted(Comparator.comparing(Order::getId).reversed())
+                    .toList();
         }
     }
 }

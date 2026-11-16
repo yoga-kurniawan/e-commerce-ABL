@@ -80,7 +80,7 @@ spec:
               value: "readinessState,db"
             # Gunakan nama property tepat, termasuk tanda hubung pada *-url.
             - name: SPRING_APPLICATION_JSON
-              value: {{ dict "clients" (dict "product-url" (printf "http://%s-product-service:8080" $.Release.Name) "cart-url" (printf "http://%s-cart-service:8080" $.Release.Name) "order-url" (printf "http://%s-order-service:8080" $.Release.Name)) | toJson | quote }}
+              value: {{ dict "clients" (dict "product-url" (printf "http://%s-product-service:8080" $.Release.Name) "cart-url" (printf "http://%s-cart-service:8080" $.Release.Name) "order-url" (printf "http://%s-order-service:8080" $.Release.Name) "payment-url" (printf "http://%s-payment-service:8080" $.Release.Name)) | toJson | quote }}
           startupProbe:
             httpGet:
               path: /actuator/health/liveness

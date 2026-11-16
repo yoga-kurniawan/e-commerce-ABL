@@ -1,5 +1,6 @@
 package id.ac.ub.abl.order.usecase.port.out;
 
+import java.util.List;
 import java.util.Optional;
 
 import id.ac.ub.abl.order.domain.Order;
@@ -10,4 +11,7 @@ public interface OrderStore {
     Order save(Order order);
 
     Optional<Order> findById(Long orderId);
+
+    /** Seluruh pesanan untuk customerId, diurutkan dari ID terbesar; list kosong jika tidak ada. */
+    List<Order> findByCustomerId(Long customerId);
 }

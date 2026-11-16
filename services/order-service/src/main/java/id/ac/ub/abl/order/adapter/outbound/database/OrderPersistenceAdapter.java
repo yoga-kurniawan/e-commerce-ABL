@@ -1,5 +1,6 @@
 package id.ac.ub.abl.order.adapter.outbound.database;
 
+import java.util.List;
 import java.util.Optional;
 
 import id.ac.ub.abl.order.adapter.outbound.database.entity.OrderJpaEntity;
@@ -39,5 +40,10 @@ public class OrderPersistenceAdapter implements OrderStore {
     @Override
     public Optional<Order> findById(Long orderId) {
         return repository.findById(orderId).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<Order> findByCustomerId(Long customerId) {
+        return repository.findByCustomerIdOrderByIdDesc(customerId).stream().map(mapper::toDomain).toList();
     }
 }

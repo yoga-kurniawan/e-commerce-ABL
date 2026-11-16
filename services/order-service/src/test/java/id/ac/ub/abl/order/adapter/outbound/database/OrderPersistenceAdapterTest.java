@@ -90,4 +90,17 @@ class OrderPersistenceAdapterTest {
     void findByIdReturnsEmptyForUnknownOrder() {
         assertTrue(store.findById(999_999L).isEmpty());
     }
+
+    @Test
+    void findByCustomerIdReturnsOnlyThatCustomerNewestFirstWithItems() {
+        Order older = store.save(newOrder());
+        Order newer = store.save(newOrder());
+        store.save(Order.place(202L, 20L, newOrder().getItems()));
+
+        List<Order> orders = store.findByCustomerId(101L);
+
+        assertEquals(List.of(newer.getId(), older.getId()), orders.stream().map(Order::getId).toList());
+        assertEquals(2, orders.get(0).getItems().size());
+        assertTrue(store.findByCustomerId(303L).isEmpty());
+    }
 }

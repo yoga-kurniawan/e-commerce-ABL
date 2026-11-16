@@ -77,6 +77,17 @@ public final class Order {
         return new Order(id, customerId, cartId, status, newAddress, items);
     }
 
+    /** PENDING menjadi CANCELLED; CANCELLED tetap (idempotent); CONFIRMED ditolak (DEC-023). */
+    public Order cancel() {
+        if (status == OrderStatus.CANCELLED) {
+            return this;
+        }
+        if (status != OrderStatus.PENDING) {
+            throw new OrderNotModifiableException("Pesanan berstatus " + status + " tidak dapat dibatalkan");
+        }
+        return new Order(id, customerId, cartId, OrderStatus.CANCELLED, shippingAddress, items);
+    }
+
     public Long getId() { return id; }
     public Long getCustomerId() { return customerId; }
     public Long getCartId() { return cartId; }

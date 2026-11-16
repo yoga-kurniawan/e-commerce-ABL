@@ -24,6 +24,13 @@ public class RestClientConfiguration {
         return build(builder, productUrl);
     }
 
+    /** Dipakai pembatalan Order untuk GET /api/v2/payments?orderId= (DEC-023). */
+    @Bean
+    public RestClient paymentRestClient(RestClient.Builder builder,
+                                        @Value("${clients.payment-url:http://127.0.0.1:8084}") String paymentUrl) {
+        return build(builder, paymentUrl);
+    }
+
     private static RestClient build(RestClient.Builder builder, String baseUrl) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(3));
