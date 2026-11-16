@@ -1,8 +1,16 @@
-# Build image dan template deployment
+# Build image dan deployment aplikasi
+
+Untuk otomasi build, database, aplikasi, dan route dalam satu perintah per tahap,
+lihat [panduan script deployment lokal](../deploy/README.md).
+
+Dokumen ini menjelaskan build dan parameter Helm. Untuk alur operasional lengkap
+di Bash/Ubuntu WSL, gunakan [panduan deployment tim](panduan-deployment-tim.md).
+Struktur konfigurasi dijelaskan di bawah; bukti runtime dan batas pengujian
+dicatat pada panduan tim.
 
 ## Lingkup dan prasyarat
 
-Dockerfile dan Helm chart yang sama digunakan pada **Windows dan Linux**. Image yang dihasilkan adalah Linux container; Windows menjalankannya melalui Docker Desktop dengan Linux containers. Linux memerlukan Docker Engine yang aktif. Sediakan Helm CLI untuk pemeriksaan chart. Untuk tahap cluster nanti, sediakan kubectl dan cluster tujuan.
+Dockerfile dan Helm chart yang sama digunakan pada **Windows dan Linux**. Image yang dihasilkan adalah Linux container; Windows menjalankannya melalui Docker Desktop dengan Linux containers. Linux memerlukan Docker Engine yang aktif. Sediakan Helm CLI untuk pemeriksaan chart. Untuk deployment, siapkan Minikube dan Istio; contoh di bawah memakai kubectl bawaan Minikube.
 
 Command berlabel `console` dapat diketik di PowerShell maupun Bash; jangan mengetik tanda prompt. Jika sintaks berbeda, tersedia blok terpisah. Jalankan dari root repository yang memiliki `pom.xml` dan folder `services/`.
 
@@ -28,7 +36,18 @@ helm version --short
 
 Pastikan bagian Server Docker tersedia. Di Windows, buka Docker Desktop dan pilih Linux containers. Java 17 dan Maven untuk build image berjalan di dalam container, sehingga versi Java host tidak menentukan build image ini.
 
-Tersedia empat Dockerfile dan Helm chart aplikasi di `deploy/helm/ecommerce/`. Database lokal memakai `compose.local.yaml`. Chart ini tidak membuat database, Secret, ingress, atau memasang Istio. Database cluster dan konfigurasi Istio dilengkapi pada tahap berikutnya.
+Tersedia empat Dockerfile dan Helm chart aplikasi di `deploy/helm/ecommerce/`.
+`compose.local.yaml` menyediakan database untuk aplikasi yang berjalan di host.
+Database cluster tersedia sebagai manifest terpisah di `deploy/kubernetes/`,
+sedangkan Gateway dan route Istio ada di `deploy/istio/`. Chart aplikasi tidak
+otomatis menerapkan manifest tersebut, membuat Secret, atau memasang Istio.
+
+Untuk workflow lokal ini, gunakan profile/context `ecommerce-abl`, release `abl`,
+dan namespace `ecommerce`. Helm membentuk nama Service dari release, tetapi
+destination route Istio saat ini menetapkan `abl` dan `ecommerce` secara tetap.
+Jika mengganti nama tersebut, sesuaikan seluruh referensi route.
+Di WSL, jalankan tools dari distro dan checkout yang sama, misalnya `~/ABL-Project`;
+tools/profile Windows bisa berbeda dari tools/profile Ubuntu.
 
 ## Struktur
 
@@ -39,12 +58,16 @@ services/
 ├── cart-service/Dockerfile
 ├── order-service/Dockerfile
 └── payment-service/Dockerfile
-deploy/helm/ecommerce/
-├── Chart.yaml
-├── values.yaml
-└── templates/
-    ├── deployment.yaml
-    └── service.yaml
+deploy/
+├── helm/ecommerce/
+│   ├── Chart.yaml
+│   ├── values.yaml
+│   ├── stages/                    # product, cart, order, payment; kumulatif
+│   └── templates/
+│       ├── deployment.yaml
+│       └── service.yaml
+├── kubernetes/                    # README dan empat manifest *-db.yaml
+└── istio/                         # gateway.yaml dan empat *-route.yaml
 ```
 
 ## 1. Build image
@@ -78,10 +101,16 @@ Default menghasilkan empat Deployment dan empat Service ClusterIP. Helm membuat 
 Contoh memeriksa Product saja:
 
 ```console
-helm template abl deploy/helm/ecommerce --namespace ecommerce --set services.cart.enabled=false --set services.order.enabled=false --set services.payment.enabled=false
+helm lint deploy/helm/ecommerce -f deploy/helm/ecommerce/stages/product.yaml
+helm template abl deploy/helm/ecommerce --namespace ecommerce -f deploy/helm/ecommerce/stages/product.yaml
 ```
 
-Gunakan override `enabled` yang sama saat install jika baru Product yang siap. Dependency yang dimatikan belum mempunyai endpoint aktif; aktifkan sebelum menguji alur bisnis yang memanggilnya.
+Gunakan file stage yang sama saat validasi dan install. Default chart mengaktifkan
+semua aplikasi; untuk deployment bertahap selalu pilih stage yang sesuai.
+Cart mempertahankan Product; Order mempertahankan Product dan Cart; Payment
+mengaktifkan seluruh aplikasi. Kembali ke stage lebih awal dapat menghapus
+Deployment/Service yang dinonaktifkan. Dependency yang dimatikan belum memiliki
+endpoint aktif; aktifkan sebelum menguji alur bisnis yang memanggilnya.
 
 ## 3. Parameter deployment
 
@@ -95,6 +124,7 @@ Gunakan override `enabled` yang sama saat install jika baru Product yang siap. D
 | `replicaCount` | Default satu replica per service |
 | `resources` | Anggaran CPU/memori awal; evaluasi saat pengujian |
 | `imagePullSecrets` | Secret registry privat jika diperlukan |
+| `imagePullPolicy` | Default `IfNotPresent` untuk workflow image lokal |
 
 Default host database `product-db`, `cart-db`, `order-db`, dan `payment-db` merupakan kontrak alamat yang harus disediakan, bukan database yang otomatis dibuat chart. Nama database masing-masing `product_db`, `cart_db`, `order_db`, dan `payment_db`, pada port 5432.
 
@@ -109,12 +139,14 @@ Panduan bertahap untuk anggota tim tersedia pada
 Panduan tersebut memakai profil `ecommerce-abl`, manifest database terpisah,
 dan file tahap Helm kumulatif untuk Product, Cart, Order, serta Payment.
 
-## 4. Tahap cluster nanti: Secret
+## 4. Siapkan Secret dan database cluster
 
-Bagian ini dijalankan setelah cluster dan database siap. Contoh memakai namespace `ecommerce` dan release `abl`. Pembuatan namespace berikut berlaku di kedua shell:
+Bagian ini dijalankan setelah cluster siap. Untuk database dari manifest repo,
+buat Secret sebelum menerapkan StatefulSet. Contoh memakai namespace `ecommerce`
+dan release `abl`. Pembuatan namespace berikut berlaku di kedua shell:
 
 ```console
-kubectl create namespace ecommerce --dry-run=client -o yaml | kubectl apply -f -
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl create namespace ecommerce --dry-run=client -o yaml | minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply -f -
 ```
 
 Siapkan file kredensial Product di Windows PowerShell:
@@ -145,32 +177,52 @@ Simpan UTF-8 tanpa BOM. Untuk `--from-env-file`, nilai bersifat literal, jadi ja
 Buat Secret, command sama pada kedua shell:
 
 ```console
-kubectl -n ecommerce create secret generic product-db-credentials --from-env-file=.secrets/product-db.env
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce create secret generic product-db-credentials --from-env-file=.secrets/product-db.env
 ```
 
 Ulangi untuk Cart, Order, dan Payment dengan file serta nama Secret sesuai `values.yaml`. Ini command pembuatan awal; jika Secret sudah ada, lakukan pembaruan terkontrol. Jangan menaruh kredensial nyata pada values atau rendered manifest.
 
-## 5. Tahap cluster nanti: image dan install
+Terapkan database Product setelah Secret tersedia:
+
+```console
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply --dry-run=server -f deploy/kubernetes/product-db.yaml
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply -f deploy/kubernetes/product-db.yaml
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce rollout status statefulset/product-db --timeout=180s
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce get pods,pvc,services
+```
+
+Target: database `1/1 Running`, PVC Bound, dan Service port 5432. Ulangi sesuai
+service pada tahapnya. Database dan aplikasi berada di namespace yang sama;
+database menonaktifkan injeksi sidecar pada template Pod. Siapkan Istio dan label
+namespace sebelum memasang aplikasi, mengikuti panduan tim. Lihat
+[README database](../deploy/kubernetes/README.md) untuk detail persistensi dan
+batasan NetworkPolicy. Perubahan Secret tidak otomatis mengganti password role
+PostgreSQL pada PVC yang telah diinisialisasi.
+
+## 5. Muat image dan install aplikasi
 
 Untuk Minikube yang sudah aktif pada sistem operasi tempat kamu menjalankan command, muat image yang telah dibangun:
 
 ```console
-minikube image load ecommerce/product-service:0.1.1-local
-minikube image load ecommerce/cart-service:0.1.0-local
-minikube image load ecommerce/order-service:0.1.0-local
-minikube image load ecommerce/payment-service:0.1.0-local
+minikube -p ecommerce-abl image load ecommerce/product-service:0.1.1-local
+minikube -p ecommerce-abl image load ecommerce/cart-service:0.1.0-local
+minikube -p ecommerce-abl image load ecommerce/order-service:0.1.0-local
+minikube -p ecommerce-abl image load ecommerce/payment-service:0.1.0-local
 ```
 
 Docker context dan Minikube profile Windows/Linux dapat berbeda. Periksa konteks tujuan sebelum load/deploy; image build pada satu Docker daemon belum tentu tersedia pada daemon lain. Untuk cluster lain, push ke registry yang dapat dijangkau node, lalu sesuaikan repository/tag/digest dan imagePullSecrets. Pakai tag baru saat build berubah agar rollout dan cache dapat dibedakan.
 
-Setelah image, database, dan Secret tersedia:
+Muat hanya image service yang sudah dibangun. Setelah image, database, Secret,
+dan injeksi sidecar siap, contoh install Product:
 
 ```console
-helm upgrade --install abl deploy/helm/ecommerce --namespace ecommerce --create-namespace --wait --timeout 5m
-kubectl -n ecommerce get deployments,pods,services
+helm upgrade --install abl deploy/helm/ecommerce --kube-context ecommerce-abl --namespace ecommerce -f deploy/helm/ecommerce/stages/product.yaml --wait --timeout 5m
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce get deployments,pods,services
 ```
 
-Tambahkan file override yang sama dengan saat validasi. Jika hanya Product siap, tambahkan tiga override `enabled=false` seperti bagian 2. Jika workload gagal ready, periksa event Pod dan log aplikasi.
+Gunakan stage berikutnya hanya setelah seluruh prasyaratnya siap. Pertahankan
+override image/resource tambahan pada setiap upgrade. Jika workload gagal ready,
+periksa event Pod dan log aplikasi; status Helm deployed bukan bukti API bisnis.
 
 ## 6. Health probes dan pemeriksaan awal
 
@@ -179,22 +231,33 @@ Chart mengaktifkan health/probes Actuator. Startup/liveness memakai `/actuator/h
 Setelah Product ready, jalankan command ini pada salah satu shell:
 
 ```console
-kubectl -n ecommerce port-forward service/abl-product-service 8081:8080
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce port-forward service/abl-product-service 18081:8080
 ```
 
 Dari terminal Windows PowerShell lain:
 
 ```powershell
-curl.exe --fail http://127.0.0.1:8081/actuator/health/readiness
+curl.exe --fail http://127.0.0.1:18081/actuator/health/readiness
 ```
 
 Atau terminal Linux Bash:
 
 ```bash
-curl --fail http://127.0.0.1:8081/actuator/health/readiness
+curl --fail http://127.0.0.1:18081/actuator/health/readiness
 ```
 
-Uji GET/POST mengikuti `specs/openapi.yaml` setelah endpoint diimplementasikan. Health sukses tidak membuktikan API bisnis selesai. Jika Spring Security ditambahkan, atur akses probe untuk kubelet. Routing Istio, TLS, policy mesh, deployment database, serta verifikasi workload di cluster merupakan tahap berikutnya.
+Uji GET/POST mengikuti `specs/openapi.yaml` dan contoh di panduan tim. Health
+sukses tidak membuktikan API bisnis selesai. Jika Spring Security ditambahkan,
+atur akses probe untuk kubelet. Setelah uji langsung berhasil, terapkan Gateway
+dan route service dari `deploy/istio/`, lalu ulangi API melalui gateway port 18080
+sesuai bagian 6 panduan tim. Penerapan route terpisah dari Helm; rollback Helm
+tidak membatalkan route, data PostgreSQL, atau migrasi Flyway.
+
+Menurut output WSL pengguna pada 16 November 2026, Product sudah lolos startup,
+migrasi Flyway, readiness, POST, dan GET daftar/detail melalui akses langsung
+serta ingress Istio. Hasil tersebut belum membuktikan runtime Cart/Order/Payment,
+seluruh operasi API, persistensi setelah restart, kebijakan mesh, atau enforcement
+NetworkPolicy. Domain/TLS publik bukan bagian dari konfigurasi HTTP lab saat ini.
 
 ## Acuan teknis
 
