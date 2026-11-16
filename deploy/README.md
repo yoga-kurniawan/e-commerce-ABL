@@ -263,6 +263,60 @@ Product; belum menguji POST/PUT/PATCH/DELETE, alur Cart/Order/Payment, idempoten
 atau persistensi setelah restart. Gunakan
 [panduan tim](../docs/panduan-deployment-tim.md) untuk pengujian bisnis lengkap.
 
+### Payment v1 dan v2 melalui gateway yang sama
+
+`istio/payment-route.yaml` meneruskan exact `/api/v1/payments` dan
+`/api/v2/payments`, serta prefix `/api/v1/payments/` dan `/api/v2/payments/`,
+ke `abl-payment-service.ecommerce.svc.cluster.local:8080` tanpa rewrite path.
+Kedua versi memakai aplikasi, Service, database, dan Secret yang sama.
+
+Pastikan checkout WSL sudah berisi adapter HTTP v2 dan manifest terbaru. Jika
+image aplikasi belum memuat v2, bangun dan deploy ulang seluruh stage Payment:
+
+```bash
+bash scripts/deploy-local.sh up payment
+```
+
+Script sudah melakukan server dry-run dan apply manifest route Payment setelah
+rollout aplikasi. Jika image v2 sudah terpasang dan hanya route yang berubah,
+cukup terapkan manifest tersebut dari WSL tanpa rebuild:
+
+```bash
+# Simpan route cluster sebelum apply untuk rollback (jika sudah ada).
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce get virtualservice payment-route -o yaml > /tmp/payment-route-before.yaml
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply --dry-run=server -f deploy/istio/payment-route.yaml
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply -f deploy/istio/payment-route.yaml
+istioctl analyze --context=ecommerce-abl -n ecommerce
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce get virtualservice payment-route -o yaml
+```
+
+Jalankan `bash scripts/deploy-local.sh gateway` di terminal terpisah, lalu:
+
+```bash
+# Ganti dengan ID Order dan Payment dari database cluster lokal.
+ORDER_ID=1
+PAYMENT_ID=1
+curl -i "http://127.0.0.1:18080/api/v1/payments/${PAYMENT_ID}"
+curl -i "http://127.0.0.1:18080/api/v2/payments/${PAYMENT_ID}"
+curl -i "http://127.0.0.1:18080/api/v2/payments?orderId=${ORDER_ID}"
+```
+
+Target detail: 200 untuk Payment yang ada. Target list: 200, ID menaik,
+atau `[]` bila Order belum memiliki Payment. GET list hanya tersedia pada v2.
+Status Pod Ready atau validasi YAML saja belum membuktikan akses gateway.
+
+Untuk rollback route saja, gunakan snapshot route cluster yang disimpan sebelum
+apply di atas. Pastikan file backup berisi VirtualService sebelum memulihkannya:
+
+```bash
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply -f /tmp/payment-route-before.yaml
+istioctl analyze --context=ecommerce-abl -n ecommerce
+```
+
+Jika route sebelumnya belum ada, command backup gagal; jangan gunakan file kosong
+untuk rollback. Rollback Helm tidak memulihkan VirtualService yang dikelola
+terpisah ini.
+
 ## 5. Jika gagal dan rollback
 
 ```bash
