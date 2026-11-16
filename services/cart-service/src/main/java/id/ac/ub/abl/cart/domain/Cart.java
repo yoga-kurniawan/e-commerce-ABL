@@ -119,4 +119,7 @@ public final class Cart {
     public Long getCustomerId() { return customerId; }
     public List<CartItem> getItems() { return Collections.unmodifiableList(items); }
     public BigDecimal getTotal() { return total; }
-}
+
+    public Cart clearItems() {
+        return new Cart(this.id, this.customerId, List.of());
+    }
