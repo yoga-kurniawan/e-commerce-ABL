@@ -77,7 +77,7 @@ Dockerfile memakai JDK 17 pada build stage dan JRE 17 pada runtime stage. Maven 
 Command berikut sama untuk PowerShell dan Bash. Kamu bisa mulai dari Product saja, lalu membangun service lain ketika siap:
 
 ```console
-docker build -f services/product-service/Dockerfile -t ecommerce/product-service:0.1.1-local .
+docker build -f services/product-service/Dockerfile -t ecommerce/product-service:0.2.0-local .
 docker build -f services/cart-service/Dockerfile -t ecommerce/cart-service:0.1.0-local .
 docker build -f services/order-service/Dockerfile -t ecommerce/order-service:0.1.0-local .
 docker build -f services/payment-service/Dockerfile -t ecommerce/payment-service:0.1.0-local .
@@ -204,7 +204,7 @@ PostgreSQL pada PVC yang telah diinisialisasi.
 Untuk Minikube yang sudah aktif pada sistem operasi tempat kamu menjalankan command, muat image yang telah dibangun:
 
 ```console
-minikube -p ecommerce-abl image load ecommerce/product-service:0.1.1-local
+minikube -p ecommerce-abl image load ecommerce/product-service:0.2.0-local
 minikube -p ecommerce-abl image load ecommerce/cart-service:0.1.0-local
 minikube -p ecommerce-abl image load ecommerce/order-service:0.1.0-local
 minikube -p ecommerce-abl image load ecommerce/payment-service:0.1.0-local

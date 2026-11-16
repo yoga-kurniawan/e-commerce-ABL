@@ -7,10 +7,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class ProductPersistenceMapper {
     public ProductJpaEntity toEntity(Product product) {
-        return new ProductJpaEntity(product.getId(), product.getName(), product.getPrice(), product.getStock(), product.isActive());
+        return new ProductJpaEntity(product.getId(), product.getName(), product.getPrice(), product.getStock(), product.isActive(), product.getDescription());
     }
 
     public Product toDomain(ProductJpaEntity entity) {
-        return Product.restore(entity.getId(), entity.getName(), entity.getPrice(), entity.getStock(), entity.isActive());
+        return Product.restore(entity.getId(), entity.getName(), entity.getPrice(), entity.getStock(), entity.isActive(), entity.getDescription());
     }
 }

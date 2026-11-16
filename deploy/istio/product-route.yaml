@@ -15,6 +15,10 @@ spec:
             exact: /api/v1/products
         - uri:
             prefix: /api/v1/products/
+        - uri:
+            exact: /api/v2/products
+        - uri:
+            prefix: /api/v2/products/
       route:
         - destination:
             host: abl-product-service.ecommerce.svc.cluster.local

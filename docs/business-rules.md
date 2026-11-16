@@ -12,7 +12,7 @@ Schema sumber dan narasi tidak selalu merinci hal yang sama. Dokumen ini menunju
 
 Semua endpoint pada tabel memakai prefix `/api/v1`. Versi API 1.0.0 dan OpenAPI 3.0.3 berasal dari laporan h. 8 dan 16. Kontrak project diperluas menjadi 18 operasi pada 10 path melalui keputusan OPEN-001; baseline laporan memuat 17 operasi pada 9 path.
 
-Versi 2.0.0 (DEC-020) memakai prefix `/api/v2` dan bersifat backward-compatible: semua operasi v1 tetap sama, ditambah field opsional/baru serta operasi baru, sehingga totalnya 22 operasi pada 11 path. Baris bertanda **v2** pada tabel di bawah hanya berlaku pada `/api/v2`; respons v1 tidak memuat field baru. Kontrak v2 belum diimplementasikan.
+Versi 2.0.0 (DEC-020) memakai prefix `/api/v2` dan bersifat backward-compatible: semua operasi v1 tetap sama, ditambah field opsional/baru serta operasi baru, sehingga totalnya 22 operasi pada 11 path. Baris bertanda **v2** pada tabel di bawah hanya berlaku pada `/api/v2`; respons v1 tidak memuat field baru. Product V2 telah diimplementasikan dan diuji; lihat `docs/product-service-v2.md`. Status implementasi service lain diverifikasi secara terpisah.
 
 ## 2. Product Service
 

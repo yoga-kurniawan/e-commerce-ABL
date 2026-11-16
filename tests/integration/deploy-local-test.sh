@@ -143,6 +143,7 @@ ok 'init retains the existing Istio installation'
 
 run_script check || fail check
 contains 'http://127.0.0.1:19191/api/v1/products'
+contains 'http://127.0.0.1:19191/api/v2/products'
 child_pid=$(sed -n 's/^FORWARD_PID=//p' "$MOCK_LOG")
 if kill -0 "$child_pid" 2>/dev/null; then fail 'temporary forward left running'; fi
 ok 'gateway GET check uses an ephemeral port and cleans up forwarding'

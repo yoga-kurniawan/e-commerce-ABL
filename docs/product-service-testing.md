@@ -68,3 +68,32 @@ publik, query string, dan header forwarded yang tidak dipercaya.
 Sebelum perbaikan, tiga kasus regresi gagal karena Location absolut mengikuti
 backend dan menyertakan query request. Setelah perbaikan, seluruh test Product
 berhasil dijalankan dengan PostgreSQL Testcontainers pada 5 November 2026.
+
+## Verifikasi Product V2 pada 16 November 2026
+
+Branch `feat/product-v2`, baseline `d1f8e91`. Perintah:
+
+```bash
+./mvnw -o -pl services/product-service -am verify
+bash tests/integration/deploy-local-test.sh
+helm lint deploy/helm/ecommerce -f deploy/helm/ecommerce/stages/product.yaml
+```
+
+Hasil: **119 tests, 0 failures, 0 errors, 0 skipped; BUILD SUCCESS**.
+JAR `services/product-service/target/product-service-0.2.0-SNAPSHOT.jar` berhasil
+terbentuk. Pada mesin ini Docker Desktop diakses melalui DOCKER_HOST yang
+mengarah ke socket desktop-linux; database test bersifat sementara.
+
+Tambahan terhadap 83 test V1 sebelumnya: 2 test domain description, 1 test
+upgrade skema V2 ke V3, dan 33 kasus HTTP V2. Test V1 tetap lulus. Cakupan baru
+meliputi description null/absent/empty dan maksimum 1000, PUT V1 menjaga
+description, PUT V2 mengosongkannya saat absen/null, filter contains literal,
+page/size default, X-Total-Count sebelum paginasi, offset page besar, soft delete,
+serta mengikuti Location V2 melalui HTTP nyata. Harga pecahan dan status aktif
+baris lama dipertahankan saat migrasi.
+
+Pemeriksaan helper deployment: **14 orchestration checks passed** memakai
+command doubles, bukan cluster nyata. Helm lint lulus. Route Product mencakup
+V1 serta V2. Pengujian ini tidak memperbarui image pada cluster yang pernah
+dideploy; build dan rollout V2 harus dijalankan sebelum pengujian gateway V2.
+Lihat [panduan Product V2](product-service-v2.md).

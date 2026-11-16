@@ -29,6 +29,9 @@ public class ProductJpaEntity {
     @Column(nullable = false)
     private boolean active;
 
+    @Column(length = 1000)
+    private String description;
+
     protected ProductJpaEntity() {
     }
 
@@ -37,11 +40,16 @@ public class ProductJpaEntity {
     }
 
     public ProductJpaEntity(Long id, String name, BigDecimal price, Integer stock, boolean active) {
+        this(id, name, price, stock, active, null);
+    }
+
+    public ProductJpaEntity(Long id, String name, BigDecimal price, Integer stock, boolean active, String description) {
         this.id = id;
         this.name = name;
         this.price = price;
         this.stock = stock;
         this.active = active;
+        this.description = description;
     }
 
     public Long getId() { return id; }
@@ -49,4 +57,5 @@ public class ProductJpaEntity {
     public BigDecimal getPrice() { return price; }
     public Integer getStock() { return stock; }
     public boolean isActive() { return active; }
+    public String getDescription() { return description; }
 }
