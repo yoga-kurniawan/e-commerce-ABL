@@ -36,8 +36,8 @@ for key in "$port_key" "$db_port_key"; do
     echo "Invalid $key in .env" >&2; exit 1;
   }
 done
-printf -v client_config '{"clients":{"product-url":"http://127.0.0.1:%s","cart-url":"http://127.0.0.1:%s","order-url":"http://127.0.0.1:%s"}}' \
-  "$PRODUCT_SERVICE_PORT" "$CART_SERVICE_PORT" "$ORDER_SERVICE_PORT"
+printf -v client_config '{"clients":{"product-url":"http://127.0.0.1:%s","cart-url":"http://127.0.0.1:%s","order-url":"http://127.0.0.1:%s","payment-url":"http://127.0.0.1:%s"}}' \
+  "$PRODUCT_SERVICE_PORT" "$CART_SERVICE_PORT" "$ORDER_SERVICE_PORT" "${PAYMENT_SERVICE_PORT:-8084}"
 cd "$ROOT"
 exec env \
   SERVER_PORT="${!port_key}" \
