@@ -3,3 +3,16 @@ apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 spec:
   profile: default
+  components:
+    pilot:
+      k8s:
+        # Local Minikube: leave memory for application/database Pods.
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        # Replace the single control-plane Pod without reserving a second one.
+        strategy:
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
