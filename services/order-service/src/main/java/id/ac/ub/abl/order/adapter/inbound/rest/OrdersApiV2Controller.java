@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.List;
 
 import id.ac.ub.abl.order.adapter.inbound.rest.dto.OrderInput;
+import id.ac.ub.abl.order.adapter.inbound.rest.dto.OrderPatchInput;
 import id.ac.ub.abl.order.adapter.inbound.rest.dto.v2.OrderOutputV2;
 import id.ac.ub.abl.order.adapter.inbound.rest.mapper.OrderHttpMapper;
 import id.ac.ub.abl.order.domain.Order;
@@ -11,6 +12,7 @@ import id.ac.ub.abl.order.usecase.service.CancelOrderUseCase;
 import id.ac.ub.abl.order.usecase.service.CreateOrderUseCase;
 import id.ac.ub.abl.order.usecase.service.GetOrderUseCase;
 import id.ac.ub.abl.order.usecase.service.ListOrdersUseCase;
+import id.ac.ub.abl.order.usecase.service.PatchOrderUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -21,17 +23,20 @@ public class OrdersApiV2Controller implements OrdersApiV2 {
     private final GetOrderUseCase getOrder;
     private final ListOrdersUseCase listOrders;
     private final CancelOrderUseCase cancelOrder;
+    private final PatchOrderUseCase patchOrder;
     private final OrderHttpMapper mapper;
 
     public OrdersApiV2Controller(CreateOrderUseCase createOrder,
                                  GetOrderUseCase getOrder,
                                  ListOrdersUseCase listOrders,
                                  CancelOrderUseCase cancelOrder,
+                                 PatchOrderUseCase patchOrder,
                                  OrderHttpMapper mapper) {
         this.createOrder = createOrder;
         this.getOrder = getOrder;
         this.listOrders = listOrders;
         this.cancelOrder = cancelOrder;
+        this.patchOrder = patchOrder;
         this.mapper = mapper;
     }
 
@@ -46,6 +51,12 @@ public class OrdersApiV2Controller implements OrdersApiV2 {
     @Override
     public ResponseEntity<OrderOutputV2> getOrder(Long orderId) {
         return ResponseEntity.ok(mapper.toOutputV2(getOrder.execute(orderId)));
+    }
+
+    @Override
+    public ResponseEntity<OrderOutputV2> updateOrder(Long orderId, OrderPatchInput input) {
+        Order order = patchOrder.execute(mapper.toPatchCommand(orderId, input));
+        return ResponseEntity.ok(mapper.toOutputV2(order));
     }
 
     @Override

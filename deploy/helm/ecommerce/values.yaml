@@ -37,7 +37,7 @@ services:
     enabled: true
     image:
       repository: ecommerce/order-service
-      tag: "0.1.0-local"
+      tag: "0.2.0-local"
       digest: ""
     database:
       host: order-db
@@ -48,7 +48,7 @@ services:
     enabled: true
     image:
       repository: ecommerce/payment-service
-      tag: "0.1.0-local"
+      tag: "0.2.0-local"
       digest: ""
     database:
       host: payment-db

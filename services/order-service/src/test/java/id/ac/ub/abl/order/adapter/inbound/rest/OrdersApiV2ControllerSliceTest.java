@@ -10,6 +10,8 @@ import id.ac.ub.abl.order.domain.OrderItem;
 import id.ac.ub.abl.order.domain.OrderStatus;
 import id.ac.ub.abl.order.domain.exception.OrderNotModifiableException;
 import id.ac.ub.abl.order.usecase.command.CreateOrderCommand;
+import id.ac.ub.abl.order.usecase.command.PatchOrderCommand;
+import id.ac.ub.abl.order.usecase.command.PatchField;
 import id.ac.ub.abl.order.usecase.exception.CartNotFoundException;
 import id.ac.ub.abl.order.usecase.exception.CartServiceUnavailableException;
 import id.ac.ub.abl.order.usecase.exception.EmptyCartException;
@@ -20,7 +22,10 @@ import id.ac.ub.abl.order.usecase.service.CancelOrderUseCase;
 import id.ac.ub.abl.order.usecase.service.CreateOrderUseCase;
 import id.ac.ub.abl.order.usecase.service.GetOrderUseCase;
 import id.ac.ub.abl.order.usecase.service.ListOrdersUseCase;
+import id.ac.ub.abl.order.usecase.service.PatchOrderUseCase;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -47,6 +52,7 @@ class OrdersApiV2ControllerSliceTest {
     @MockitoBean GetOrderUseCase getOrder;
     @MockitoBean ListOrdersUseCase listOrders;
     @MockitoBean CancelOrderUseCase cancelOrder;
+    @MockitoBean PatchOrderUseCase patchOrder;
 
     private static Order order(Long id, OrderStatus status) {
         return Order.restore(id, 101L, 10L, status, null, List.of(
@@ -160,13 +166,54 @@ class OrdersApiV2ControllerSliceTest {
     }
 
     @Test
-    void patchPutAndDeleteAreNotProvidedYet() throws Exception {
-        http.perform(patch(BASE + "/501").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"shippingAddress\":\"Jl. Veteran\"}"))
-                .andExpect(status().isMethodNotAllowed());
+    void putAndDelete_whenUnsupported_shouldReturn405() throws Exception {
         http.perform(put(BASE + "/501").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isMethodNotAllowed());
         http.perform(delete(BASE + "/501")).andExpect(status().isMethodNotAllowed());
+    }
+
+    @Test
+    void patchOrder_whenValid_shouldReturnAddressAndSnapshotWithoutChangingStatusOrTotal() throws Exception {
+        var command = new PatchOrderCommand(501L, PatchField.supplied("Jl. Veteran"));
+        when(patchOrder.execute(command)).thenReturn(
+                order(501L, OrderStatus.PENDING).changeShippingAddress("Jl. Veteran"));
+
+        http.perform(patch(BASE + "/501").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shippingAddress\":\"Jl. Veteran\",\"status\":\"CANCELLED\",\"total\":0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shippingAddress").value("Jl. Veteran"))
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.total").value(850000.125))
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[1].unitPrice").value(150000.125));
+        verify(patchOrder).execute(command);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"shippingAddress\":null}", "{\"shippingAddress\":\"\"}",
+            "{\"shippingAddress\":\"   \"}", "{\"status\":\"CANCELLED\"}"})
+    void patchOrder_whenAddressInvalid_shouldReturn400WithoutMutation(String body) throws Exception {
+        http.perform(patch(BASE + "/501").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        verify(patchOrder, never()).execute(any());
+    }
+
+    @Test
+    void patchOrder_whenMissingOrNotPending_shouldReturn404Or409() throws Exception {
+        when(patchOrder.execute(new PatchOrderCommand(999L, PatchField.supplied("Jl. Veteran"))))
+                .thenThrow(new OrderNotFoundException(999L));
+        http.perform(patch(BASE + "/999").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shippingAddress\":\"Jl. Veteran\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+
+        when(patchOrder.execute(new PatchOrderCommand(501L, PatchField.supplied("Jl. Veteran"))))
+                .thenThrow(new OrderNotModifiableException("Pesanan bukan PENDING"));
+        http.perform(patch(BASE + "/501").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shippingAddress\":\"Jl. Veteran\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONFLICT"));
     }
 
     @Test

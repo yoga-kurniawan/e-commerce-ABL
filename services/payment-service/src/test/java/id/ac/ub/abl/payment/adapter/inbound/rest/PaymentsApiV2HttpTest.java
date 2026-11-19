@@ -198,7 +198,11 @@ class PaymentsApiV2HttpTest {
         http.perform(get(BASE + "/9001")).andExpect(status().isOk()).andExpect(jsonPath("$.id").value(9001));
         http.perform(get("/api/v1/payments").param("orderId", "501"))
                 .andExpect(status().isMethodNotAllowed()).andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
-        http.perform(delete(BASE + "/9001")).andExpect(status().isMethodNotAllowed());
+        http.perform(delete(BASE + "/9001")).andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+        http.perform(put(BASE + "/9001").contentType("application/json").content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
         verify(get, times(2)).execute(9001L);
         verifyNoInteractions(list, create, patch);
     }

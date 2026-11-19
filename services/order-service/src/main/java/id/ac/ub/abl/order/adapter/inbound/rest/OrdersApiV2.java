@@ -3,12 +3,14 @@ package id.ac.ub.abl.order.adapter.inbound.rest;
 import java.util.List;
 
 import id.ac.ub.abl.order.adapter.inbound.rest.dto.OrderInput;
+import id.ac.ub.abl.order.adapter.inbound.rest.dto.OrderPatchInput;
 import id.ac.ub.abl.order.adapter.inbound.rest.dto.v2.OrderOutputV2;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,6 +24,10 @@ public interface OrdersApiV2 {
 
     @GetMapping("/{orderId}")
     ResponseEntity<OrderOutputV2> getOrder(@PathVariable("orderId") Long orderId);
+
+    @PatchMapping(value = "/{orderId}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<OrderOutputV2> updateOrder(@PathVariable("orderId") Long orderId,
+                                            @Valid @RequestBody OrderPatchInput input);
 
     @PostMapping("/{orderId}/cancel")
     ResponseEntity<OrderOutputV2> cancelOrder(@PathVariable("orderId") Long orderId);
