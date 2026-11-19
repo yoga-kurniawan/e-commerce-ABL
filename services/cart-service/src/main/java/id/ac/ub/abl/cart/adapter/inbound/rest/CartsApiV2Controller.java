@@ -6,12 +6,13 @@ import id.ac.ub.abl.cart.adapter.inbound.rest.dto.CartInput;
 import id.ac.ub.abl.cart.adapter.inbound.rest.dto.CartItemInput;
 import id.ac.ub.abl.cart.adapter.inbound.rest.dto.CartItemPatchInput;
 import id.ac.ub.abl.cart.adapter.inbound.rest.dto.CartItemQuantityInput;
-import id.ac.ub.abl.cart.adapter.inbound.rest.dto.CartOutput;
-import id.ac.ub.abl.cart.adapter.inbound.rest.dto.UpdatedCartItemOutput;
+import id.ac.ub.abl.cart.adapter.inbound.rest.dto.v2.CartOutputV2;
+import id.ac.ub.abl.cart.adapter.inbound.rest.dto.v2.UpdatedCartItemOutputV2;
 import id.ac.ub.abl.cart.adapter.inbound.rest.mapper.CartHttpMapper;
 import id.ac.ub.abl.cart.domain.Cart;
 import id.ac.ub.abl.cart.domain.CartItem;
 import id.ac.ub.abl.cart.usecase.service.AddCartItemUseCase;
+import id.ac.ub.abl.cart.usecase.service.ClearCartItemsUseCase;
 import id.ac.ub.abl.cart.usecase.service.CreateCartUseCase;
 import id.ac.ub.abl.cart.usecase.service.DeleteCartItemUseCase;
 import id.ac.ub.abl.cart.usecase.service.GetCartUseCase;
@@ -55,13 +56,13 @@ public class CartsApiV2Controller implements CartsApiV2 {
         Cart cart = createCart.execute(mapper.toCreateCommand(input));
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{cartId}").buildAndExpand(cart.getId()).toUri();
-        return ResponseEntity.created(location).body(mapper.toOutput(cart));
+        return ResponseEntity.created(location).body(mapper.toOutputV2(cart));
     }
 
     @Override
     public ResponseEntity<CartOutputV2> getCart(Long cartId) {
         Cart cart = getCart.execute(cartId);
-        return ResponseEntity.ok(mapper.toOutput(cart));
+        return ResponseEntity.ok(mapper.toOutputV2(cart));
     }
 
     @Override
@@ -69,21 +70,21 @@ public class CartsApiV2Controller implements CartsApiV2 {
         Cart cart = addCartItem.execute(mapper.toAddCommand(cartId, input));
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{productId}").buildAndExpand(input.productId()).toUri();
-        return ResponseEntity.created(location).body(mapper.toOutput(cart));
+        return ResponseEntity.created(location).body(mapper.toOutputV2(cart));
     }
 
     @Override
     public ResponseEntity<UpdatedCartItemOutputV2> replaceItem(Long cartId, Long productId, CartItemQuantityInput input) {
         Cart cart = replaceCartItem.execute(mapper.toReplaceCommand(cartId, productId, input));
         CartItem item = cart.findItem(productId).orElseThrow();
-        return ResponseEntity.ok(mapper.toUpdatedItemOutput(cartId, item));
+        return ResponseEntity.ok(mapper.toUpdatedItemOutputV2(cartId, item));
     }
 
     @Override
     public ResponseEntity<UpdatedCartItemOutputV2> updateItem(Long cartId, Long productId, CartItemPatchInput input) {
         Cart cart = patchCartItem.execute(mapper.toPatchCommand(cartId, productId, input));
         CartItem item = cart.findItem(productId).orElseThrow();
-        return ResponseEntity.ok(mapper.toUpdatedItemOutput(cartId, item));
+        return ResponseEntity.ok(mapper.toUpdatedItemOutputV2(cartId, item));
     }
 
     @Override
@@ -96,4 +97,5 @@ public class CartsApiV2Controller implements CartsApiV2 {
     public ResponseEntity<Void> clearItems(Long cartId) {
         clearCartItems.execute(cartId);
         return ResponseEntity.noContent().build();
+    }
 }

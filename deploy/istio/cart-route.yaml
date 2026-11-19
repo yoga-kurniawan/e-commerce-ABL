@@ -15,6 +15,10 @@ spec:
             exact: /api/v1/carts
         - uri:
             prefix: /api/v1/carts/
+        - uri:
+            exact: /api/v2/carts
+        - uri:
+            prefix: /api/v2/carts/
       route:
         - destination:
             host: abl-cart-service.ecommerce.svc.cluster.local

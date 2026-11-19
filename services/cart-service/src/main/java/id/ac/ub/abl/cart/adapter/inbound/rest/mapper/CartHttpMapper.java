@@ -70,5 +70,4 @@ public class CartHttpMapper {
     public UpdatedCartItemOutputV2 toUpdatedItemOutputV2(Long cartId, CartItem item) {
         return new UpdatedCartItemOutputV2(cartId, item.getProductId(), item.getQuantity(), item.getUnitPrice(), item.getSubtotal());
     }
-b
 }
