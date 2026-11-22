@@ -35,9 +35,14 @@ class ProductTest {
     @Test
     void rejectsMissingRequiredAttributes() {
         assertThrows(DomainRuleViolation.class, () -> Product.create(null, BigDecimal.ONE, 1));
+        assertThrows(DomainRuleViolation.class, () -> Product.create("", BigDecimal.ONE, 1));
+        assertThrows(DomainRuleViolation.class, () -> Product.create("   ", BigDecimal.ONE, 1));
         assertThrows(DomainRuleViolation.class, () -> Product.create("Keyboard", null, 1));
         assertThrows(DomainRuleViolation.class, () -> Product.create("Keyboard", BigDecimal.ONE, null));
         assertThrows(DomainRuleViolation.class, () -> Product.restore(null, "Keyboard", BigDecimal.ONE, 1));
+        Product product = Product.restore(7L, "Keyboard", BigDecimal.ONE, 1);
+        assertThrows(DomainRuleViolation.class, () -> product.changeName(""));
+        assertThrows(DomainRuleViolation.class, () -> product.changeName("   "));
     }
 
     @Test

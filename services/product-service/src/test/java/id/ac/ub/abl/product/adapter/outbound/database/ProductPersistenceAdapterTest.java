@@ -61,6 +61,7 @@ class ProductPersistenceAdapterTest {
         assertEquals("Keyboard", loaded.getName());
         assertEquals(20, loaded.getStock());
         assertEquals(1, repository.count());
+        assertEquals(1L, repository.findById(saved.getId()).orElseThrow().getVersion());
     }
 
     @Test
@@ -71,8 +72,7 @@ class ProductPersistenceAdapterTest {
         var second = store.save(Product.create("Mouse", BigDecimal.ZERO, 0));
 
         var ids = store.findAll().stream().map(Product::getId).toList();
-        assertEquals(2, ids.size());
-        assertTrue(ids.containsAll(java.util.List.of(first.getId(), second.getId())));
+        assertEquals(java.util.List.of(first.getId(), second.getId()), ids);
 
         store.delete(first);
 
@@ -81,6 +81,7 @@ class ProductPersistenceAdapterTest {
         assertEquals(1, store.findAll().size());
         var historical = repository.findById(first.getId()).orElseThrow();
         assertFalse(historical.isActive());
+        assertEquals(1L, historical.getVersion());
         assertEquals("Keyboard", historical.getName());
         assertEquals(0, BigDecimal.ONE.compareTo(historical.getPrice()));
         assertEquals(1, historical.getStock());

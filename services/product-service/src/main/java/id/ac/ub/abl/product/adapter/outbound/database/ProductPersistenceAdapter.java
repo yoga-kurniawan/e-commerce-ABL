@@ -27,7 +27,15 @@ public class ProductPersistenceAdapter implements ProductStore, ProductSearch {
     @Override
     @Transactional
     public Product save(Product product) {
-        return mapper.toDomain(repository.save(mapper.toEntity(product)));
+        var entity = product.getId() == null
+                ? mapper.toEntity(product)
+                : repository.findById(product.getId())
+                        .map(existing -> {
+                            mapper.updateEntity(existing, product);
+                            return existing;
+                        })
+                        .orElseGet(() -> mapper.toEntity(product));
+        return mapper.toDomain(repository.saveAndFlush(entity));
     }
 
     @Override
@@ -37,7 +45,7 @@ public class ProductPersistenceAdapter implements ProductStore, ProductSearch {
 
     @Override
     public List<Product> findAll() {
-        return repository.findAllByActiveTrue().stream().map(mapper::toDomain).toList();
+        return repository.findAllByActiveTrueOrderByIdAsc().stream().map(mapper::toDomain).toList();
     }
 
     @Override
@@ -51,6 +59,6 @@ public class ProductPersistenceAdapter implements ProductStore, ProductSearch {
     @Override
     @Transactional
     public void delete(Product product) {
-        repository.save(mapper.toEntity(product.deactivate()));
+        save(product.deactivate());
     }
 }

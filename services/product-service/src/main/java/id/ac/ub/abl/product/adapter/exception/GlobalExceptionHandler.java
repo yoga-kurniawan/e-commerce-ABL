@@ -4,10 +4,12 @@ import id.ac.ub.abl.product.domain.exception.DomainRuleViolation;
 import id.ac.ub.abl.product.usecase.exception.ProductNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -27,6 +29,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(DomainRuleViolation.class)
     public ResponseEntity<ApiError> domainRuleViolation(DomainRuleViolation exception) {
         return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", exception.getMessage()));
+    }
+
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class, DataIntegrityViolationException.class})
+    public ResponseEntity<ApiError> conflict(RuntimeException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError("CONFLICT", "Data produk sedang diperbarui oleh permintaan lain; silakan coba lagi"));
     }
 
     @Override

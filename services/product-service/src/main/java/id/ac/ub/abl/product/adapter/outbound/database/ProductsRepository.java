@@ -12,7 +12,7 @@ import org.springframework.data.repository.query.Param;
 public interface ProductsRepository extends JpaRepository<ProductJpaEntity, Long> {
     Optional<ProductJpaEntity> findByIdAndActiveTrue(Long productId);
 
-    List<ProductJpaEntity> findAllByActiveTrue();
+    List<ProductJpaEntity> findAllByActiveTrueOrderByIdAsc();
 
     // POSITION treats %, _ and backslash literally, unlike a LIKE pattern.
     // PostgreSQL LIMIT NULL returns every row; long OFFSET avoids page*size overflow.

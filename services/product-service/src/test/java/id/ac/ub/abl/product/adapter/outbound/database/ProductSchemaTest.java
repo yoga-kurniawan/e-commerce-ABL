@@ -47,7 +47,7 @@ class ProductSchemaTest {
         jdbc.update("INSERT INTO description_upgrade_test.products(name,price,stock,active) VALUES ('History', 1, 0, false)");
         var latest = Flyway.configure()
                 .dataSource(DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword())
-                .schemas("description_upgrade_test").load();
+                .schemas("description_upgrade_test").target("3").load();
         latest.migrate();
         latest.validate();
         assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM description_upgrade_test.products WHERE description IS NULL", Integer.class));
@@ -56,6 +56,30 @@ class ProductSchemaTest {
                 "SELECT price FROM description_upgrade_test.products WHERE name='Existing'", BigDecimal.class)));
         latest.migrate();
         assertEquals("3", latest.info().current().getVersion().getVersion());
+    }
+
+    @Test
+    void upgradingV3DataToVersionAndConstraintsPreservesExistingRows() {
+        var v3 = Flyway.configure()
+                .dataSource(DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword())
+                .schemas("version_upgrade_test").target("3").load();
+        v3.migrate();
+        jdbc.update("INSERT INTO version_upgrade_test.products(name,price,stock,description) VALUES ('Existing', 350000.125, 20, 'Desc')");
+
+        var latest = Flyway.configure()
+                .dataSource(DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword())
+                .schemas("version_upgrade_test").load();
+        latest.migrate();
+        latest.validate();
+
+        assertEquals("4", latest.info().current().getVersion().getVersion());
+        assertEquals(0L, jdbc.queryForObject(
+                "SELECT version FROM version_upgrade_test.products WHERE name = 'Existing'", Long.class));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT count(*) FROM pg_indexes WHERE schemaname = 'version_upgrade_test' AND indexname = 'idx_products_active_id'",
+                Integer.class));
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update(
+                "INSERT INTO version_upgrade_test.products(name,price,stock) VALUES ('   ', 1, 1)"));
     }
 
     @Test
@@ -105,6 +129,8 @@ class ProductSchemaTest {
         assertInvalid("Keyboard", new BigDecimal("-0.01"), 1);
         assertInvalid("Keyboard", BigDecimal.ONE, -1);
         assertInvalid(null, BigDecimal.ONE, 1);
+        assertInvalid("", BigDecimal.ONE, 1);
+        assertInvalid("   ", BigDecimal.ONE, 1);
         assertInvalid("Keyboard", null, 1);
         assertInvalid("Keyboard", BigDecimal.ONE, null);
     }
