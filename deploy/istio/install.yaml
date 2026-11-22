@@ -3,16 +3,47 @@ apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 spec:
   profile: default
+  meshConfig:
+    enableTracing: true
+    defaultConfig:
+      holdApplicationUntilProxyStarts: true
+      tracing:
+        sampling: 100.0
   components:
     pilot:
       k8s:
         # Local Minikube: leave memory for application/database Pods.
         resources:
           requests:
-            cpu: 500m
-            memory: 512Mi
+            cpu: 200m
+            memory: 256Mi
         # Replace the single control-plane Pod without reserving a second one.
         strategy:
           rollingUpdate:
             maxSurge: 0
             maxUnavailable: 1
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          strategy:
+            rollingUpdate:
+              maxSurge: 0
+              maxUnavailable: 1
+  values:
+    global:
+      proxy:
+        resources:
+          requests:
+            cpu: 25m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
