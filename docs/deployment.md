@@ -47,13 +47,11 @@ processors=4
 Tersedia empat Dockerfile dan Helm chart aplikasi di `deploy/helm/ecommerce/`.
 `compose.local.yaml` menyediakan database untuk aplikasi yang berjalan di host.
 Database cluster tersedia sebagai manifest terpisah di `deploy/kubernetes/`,
-sedangkan Gateway dan route Istio ada di `deploy/istio/`. Chart aplikasi tidak
+sedangkan Gateway Istio ada di `deploy/istio/gateway.yaml`, dan rute serta kebijakan keamanan mesh dikelola langsung oleh Helm chart. Chart aplikasi tidak
 otomatis menerapkan manifest tersebut, membuat Secret, atau memasang Istio.
 
 Untuk workflow lokal ini, gunakan profile/context `ecommerce-abl`, release `abl`,
-dan namespace `ecommerce`. Helm membentuk nama Service dari release, tetapi
-destination route Istio saat ini menetapkan `abl` dan `ecommerce` secara tetap.
-Jika mengganti nama tersebut, sesuaikan seluruh referensi route.
+dan namespace `ecommerce`. Helm membentuk nama Service dari release secara otomatis.
 Di WSL, jalankan tools dari distro dan checkout yang sama, misalnya `~/ABL-Project`;
 tools/profile Windows bisa berbeda dari tools/profile Ubuntu.
 
@@ -73,9 +71,13 @@ deploy/
 │   ├── stages/                    # product, cart, order, payment; kumulatif
 │   └── templates/
 │       ├── deployment.yaml
-│       └── service.yaml
+│       ├── service.yaml
+│       ├── serviceaccount.yaml
+│       ├── istio-virtualservice.yaml
+│       ├── istio-destinationrule.yaml
+│       └── istio-security.yaml
 ├── kubernetes/                    # README dan empat manifest *-db.yaml
-└── istio/                         # gateway.yaml dan empat *-route.yaml
+└── istio/                         # gateway.yaml
 ```
 
 ## 1. Build image
@@ -86,9 +88,9 @@ Command berikut sama untuk PowerShell dan Bash. Kamu bisa mulai dari Product saj
 
 ```console
 docker build -f services/product-service/Dockerfile -t ecommerce/product-service:0.2.0-local .
-docker build -f services/cart-service/Dockerfile -t ecommerce/cart-service:0.1.0-local .
-docker build -f services/order-service/Dockerfile -t ecommerce/order-service:0.1.0-local .
-docker build -f services/payment-service/Dockerfile -t ecommerce/payment-service:0.1.0-local .
+docker build -f services/cart-service/Dockerfile -t ecommerce/cart-service:0.2.0-local .
+docker build -f services/order-service/Dockerfile -t ecommerce/order-service:0.2.0-local .
+docker build -f services/payment-service/Dockerfile -t ecommerce/payment-service:0.2.0-local .
 ```
 
 Pastikan setiap build berhasil sebelum melanjutkan. Build menjalankan `package -DskipTests`: kompilasi test tetap dilakukan, tetapi tests tidak dijalankan. Jalankan tests secara terpisah menggunakan datasource/profile pengujian. Akses registry image dan repository Maven diperlukan. Tag image dasar mengikuti keluarga Java 17; pin digest setelah image diuji tim untuk build yang lebih reproducible.
@@ -213,9 +215,9 @@ Untuk Minikube yang sudah aktif pada sistem operasi tempat kamu menjalankan comm
 
 ```console
 minikube -p ecommerce-abl image load ecommerce/product-service:0.2.0-local
-minikube -p ecommerce-abl image load ecommerce/cart-service:0.1.0-local
-minikube -p ecommerce-abl image load ecommerce/order-service:0.1.0-local
-minikube -p ecommerce-abl image load ecommerce/payment-service:0.1.0-local
+minikube -p ecommerce-abl image load ecommerce/cart-service:0.2.0-local
+minikube -p ecommerce-abl image load ecommerce/order-service:0.2.0-local
+minikube -p ecommerce-abl image load ecommerce/payment-service:0.2.0-local
 ```
 
 Docker context dan Minikube profile Windows/Linux dapat berbeda. Periksa konteks tujuan sebelum load/deploy; image build pada satu Docker daemon belum tentu tersedia pada daemon lain. Untuk cluster lain, push ke registry yang dapat dijangkau node, lalu sesuaikan repository/tag/digest dan imagePullSecrets. Pakai tag baru saat build berubah agar rollout dan cache dapat dibedakan.

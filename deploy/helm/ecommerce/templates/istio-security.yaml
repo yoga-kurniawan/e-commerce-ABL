@@ -38,6 +38,23 @@ spec:
       {{- include "ecommerce.selectorLabels" (dict "serviceName" $name "context" $) | nindent 6 }}
   action: ALLOW
   rules:
+    {{- if and $.Values.istio.prometheus $.Values.istio.prometheus.principals }}
+    {{- /* Catatan: Istio secara default (enablePrometheusMerge: true) menggabungkan metrik 127.0.0.1:9090/actuator/prometheus
+           secara lokal ke port sidecar 15020/stats/prometheus. Rule di bawah adalah opsi kesiapan scraping langsung
+           antar-workload jika Prometheus server dikonfigurasi dengan principal mTLS tertentu. */}}
+    - from:
+        - source:
+            principals:
+              {{- range $.Values.istio.prometheus.principals }}
+              - {{ . | quote }}
+              {{- end }}
+      to:
+        - operation:
+            methods: ["GET"]
+            ports: [{{ $.Values.management.port | quote }}]
+            paths:
+              - "/actuator/prometheus"
+    {{- end }}
     - from:
         - source:
             principals:

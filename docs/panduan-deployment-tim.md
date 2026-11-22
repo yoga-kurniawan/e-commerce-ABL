@@ -34,7 +34,7 @@ sudah berhasil hanya karena membaca panduan dari awal.
 | Alamat antarservice | localhost:8081–8084 | DNS Service Kubernetes, port 8080 |
 | Kredensial | `.env` lokal | Secret Kubernetes |
 | Akses awal dari laptop | Port aplikasi langsung | Port-forward untuk uji langsung |
-| Akses melalui Istio ingress | Belum digunakan | Gateway bersama dan route per service di `deploy/istio/` |
+| Akses melalui Istio ingress | Belum digunakan | Gateway bersama di `deploy/istio/gateway.yaml` dan routing mesh di Helm chart |
 
 Menutup terminal `kubectl port-forward` hanya menutup akses dari laptop;
 Pod aplikasi tetap berjalan. Docker engine dan Minikube harus tetap aktif.
@@ -61,9 +61,9 @@ dan context **`ecommerce-abl`** secara konsisten. Meng-upgrade release yang sama
 dengan konfigurasi yang menonaktifkan service sebelumnya dapat menghapus
 Deployment dan Service aplikasi tersebut.
 
-Destination pada file `deploy/istio/*-route.yaml` menetapkan release `abl` dan
-namespace `ecommerce` secara tetap, sementara Helm membentuk nama Service dari
-release. Jika mengganti nama tersebut, sesuaikan semua referensi route.
+Helm chart mengelola rute mesh dan ingress VirtualService secara otomatis
+menggunakan release `abl` dan namespace `ecommerce`. Jika mengganti nama release
+atau namespace, sesuaikan parameter Helm yang bersangkutan.
 
 Panduan dan manifest untuk Cart sampai Payment disiapkan agar dapat dijalankan
 oleh pemilik service. Validasi YAML atau dry-run bukan bukti deployment runtime
@@ -224,8 +224,7 @@ mendukung NetworkPolicy; kindnet bawaan tidak menjamin enforcement tersebut.
 ### 4.3 Build dan muat image
 
 ```bash
-IMAGE_TAG=0.1.0-local
-if [ "$SERVICE" = product ]; then IMAGE_TAG=0.2.0-local; fi
+IMAGE_TAG=0.2.0-local
 docker build -f "services/${SERVICE}-service/Dockerfile" -t "ecommerce/${SERVICE}-service:${IMAGE_TAG}" .
 minikube -p ecommerce-abl image load "ecommerce/${SERVICE}-service:${IMAGE_TAG}"
 minikube -p ecommerce-abl image ls
@@ -268,48 +267,41 @@ request bisnis berhasil. Jika image source berubah, gunakan tag baru dan
 pertahankan override tag tersebut pada setiap Helm upgrade selanjutnya; jangan
 mengasumsikan tag lama dengan IfNotPresent otomatis memuat build terbaru.
 
-### 4.5 Akses API dari laptop untuk uji awal
+### 4.5 Pemeriksaan Health dan Metrik dari Laptop
 
-Buka satu terminal port-forward per service yang perlu diuji. Misalnya Cart:
+Aktuator aplikasi berjalan pada management port `9090` yang terisolasi (`MANAGEMENT_SERVER_PORT=9090`). Port bisnis `8080` dan gateway ingress tidak mengekspos endpoint `/actuator/*`. Buka port-forward ke Deployment service yang ingin diperiksa:
 
 ```bash
-minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce port-forward service/abl-cart-service 18082:8080
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce port-forward "deployment/abl-${SERVICE}-service" 19090:9090
 ```
 
-| Service | Target port-forward | Port laptop |
-|---|---|---|
-| Product | `service/abl-product-service` | `18081:8080` |
-| Cart | `service/abl-cart-service` | `18082:8080` |
-| Order | `service/abl-order-service` | `18083:8080` |
-| Payment | `service/abl-payment-service` | `18084:8080` |
+Uji HTTP readiness dan endpoint metrik Prometheus dari terminal lain:
 
-Gunakan pola perintah yang sama untuk membuka port-forward lainnya. Port
-18081–18084 dipilih agar tidak bercampur dengan aplikasi host 8081–8084.
-Terminal ini hanya meneruskan koneksi; aplikasi berjalan di Pod, bukan sebagai
-proses Spring Boot host. Panggilan antarservice tetap memakai DNS cluster.
+```bash
+curl --fail --show-error http://127.0.0.1:19090/actuator/health/readiness
+curl --fail --show-error http://127.0.0.1:19090/actuator/prometheus
+```
+
+Target: HTTP 200 dengan status UP. Untuk pengujian API bisnis, arahkan seluruh panggilan melalui Istio ingress gateway pada port `18080` (lihat Bagian 5 dan 6).
 
 ## 5. Uji alur bisnis secara berurutan
 
-Jalankan curl di terminal pengujian setelah port-forward yang diperlukan aktif.
-Ganti ID contoh dengan ID dari response aktual. Cluster baru bisa mempunyai
-ID berbeda dari pengujian Compose sebelumnya.
-
-Sebelum API bisnis, uji HTTP readiness dari terminal pengujian. Contoh Product
-setelah port-forward Product pada port 18081 aktif:
+Jalankan curl di terminal pengujian setelah ingress gateway aktif. Buka port-forward gateway jika belum berjalan:
 
 ```bash
-curl --fail --show-error http://127.0.0.1:18081/actuator/health/readiness
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n istio-system port-forward service/istio-ingressgateway 18080:80
 ```
 
-Target: HTTP 200 dengan status UP. Readiness tidak menggantikan POST/GET bisnis.
+Ganti ID contoh dengan ID dari response aktual. Cluster baru bisa mempunyai
+ID berbeda dari pengujian Compose sebelumnya.
 
 ### Product
 
 ```bash
-curl -i -X POST http://127.0.0.1:18081/api/v1/products \
+curl -i -X POST http://127.0.0.1:18080/api/v1/products \
   -H 'Content-Type: application/json' \
   -d '{"name":"Keyboard Cluster","price":350000,"stock":20}'
-curl -i http://127.0.0.1:18081/api/v1/products
+curl -i http://127.0.0.1:18080/api/v1/products
 ```
 
 Target: POST 201, GET 200; catat productId. Product mengembalikan Location
@@ -320,16 +312,16 @@ Ini mempertahankan port publik meskipun alamat yang dilihat backend berbeda.
 ### Cart
 
 ```bash
-curl -i -X POST http://127.0.0.1:18082/api/v1/carts \
+curl -i -X POST http://127.0.0.1:18080/api/v1/carts \
   -H 'Content-Type: application/json' -d '{"customerId":101}'
 ```
 
 Catat cartId. Contoh berikut mengasumsikan cartId 1 dan productId 1; sesuaikan:
 
 ```bash
-curl -i -X POST http://127.0.0.1:18082/api/v1/carts/1/items \
+curl -i -X POST http://127.0.0.1:18080/api/v1/carts/1/items \
   -H 'Content-Type: application/json' -d '{"productId":1,"quantity":2}'
-curl -i http://127.0.0.1:18082/api/v1/carts/1
+curl -i http://127.0.0.1:18080/api/v1/carts/1
 ```
 
 Target: POST cart 201, POST item 201, GET 200, quantity 2 dan total 700000.
@@ -338,9 +330,9 @@ Keberhasilan POST item juga menguji koneksi Cart ke Product di cluster.
 ### Order
 
 ```bash
-curl -i -X POST http://127.0.0.1:18083/api/v1/orders \
+curl -i -X POST http://127.0.0.1:18080/api/v1/orders \
   -H 'Content-Type: application/json' -d '{"cartId":1,"customerId":101}'
-curl -i http://127.0.0.1:18083/api/v1/orders/1
+curl -i http://127.0.0.1:18080/api/v1/orders/1
 ```
 
 Sesuaikan cartId dan ID pada GET dari response. Target: POST 201, GET 200,
@@ -349,11 +341,11 @@ total 700000, status PENDING. Cart harus memiliki item dan customer yang sesuai.
 ### Payment
 
 ```bash
-curl -i -X POST http://127.0.0.1:18084/api/v1/payments \
+curl -i -X POST http://127.0.0.1:18080/api/v1/payments \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: cluster-payment-001' \
   -d '{"orderId":1,"method":"COD"}'
-curl -i http://127.0.0.1:18084/api/v1/payments/1
+curl -i http://127.0.0.1:18080/api/v1/payments/1
 ```
 
 Sesuaikan orderId dan paymentId. Target: POST 201, GET 200, amount 700000,
@@ -364,20 +356,19 @@ menghasilkan 404. Simulator pembayaran tidak dibutuhkan dan tetap nonaktif.
 
 ## 6. Bedakan bukti aplikasi cluster dan bukti ingress Istio
 
-Istio control plane aktif, sidecar terpasang, dan API melalui port-forward
-berhasil adalah bukti tahap aplikasi Kubernetes. Itu belum membuktikan routing
-ingress. Chart aplikasi tidak membuat Gateway atau VirtualService; manifest
-terpisah tersedia di `deploy/istio/`. Terapkan route hanya setelah aplikasi
-service tersebut Ready. Product bisa diuji lebih dahulu tanpa Cart/Order/Payment.
+Istio control plane aktif, sidecar terpasang, dan rute serta kebijakan mesh
+(`VirtualService`, `DestinationRule`, `PeerAuthentication`, `AuthorizationPolicy`)
+dikelola langsung oleh Helm chart. Untuk menghubungkan ingress controller dengan
+VirtualService aplikasi, terapkan manifest Gateway bersama di `deploy/istio/gateway.yaml`:
 
 ```bash
-minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply --dry-run=server -f deploy/istio/gateway.yaml -f "deploy/istio/${SERVICE}-route.yaml"
-minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply -f deploy/istio/gateway.yaml -f "deploy/istio/${SERVICE}-route.yaml"
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply --dry-run=server -f deploy/istio/gateway.yaml
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply -f deploy/istio/gateway.yaml
 istioctl analyze --context=ecommerce-abl -n ecommerce
 ```
 
 Gateway bersama berada di namespace istio-system, tempat Pod ingress berada.
-Route aplikasi berada di ecommerce dan merujuk `istio-system/ecommerce-gateway`.
+VirtualService ingress di namespace ecommerce merujuk `istio-system/ecommerce-gateway`.
 Route mempertahankan path `/api/v1/<resource>` tanpa rewrite dan hanya menerima
 path collection tepat atau detail dengan pemisah `/`. Route Payment juga menerima
 exact `/api/v2/payments` dan prefix `/api/v2/payments/` menuju Service Payment
@@ -386,7 +377,7 @@ yang sama, tanpa menghapus versi pada path. GET riwayat tersedia melalui
 POST, GET detail, dan PATCH Payment tersedia pada kedua versi, dengan format
 payload yang sama dan scope idempotency bersama. Image Payment yang berjalan
 harus sudah memuat adapter v2. Lihat [panduan Payment gateway](../deploy/README.md#payment-v1-dan-v2-melalui-gateway-yang-sama)
-untuk deployment, validasi, dan rollback route. Host wildcard dan HTTP
+untuk deployment, validasi, dan pengujian route. Host wildcard dan HTTP
 dipakai untuk lab lokal ini; konfigurasi domain/TLS lingkungan lain perlu
 disesuaikan. Pola mengikuti [panduan ingress Istio](https://istio.io/latest/docs/tasks/traffic-management/ingress/ingress-control/).
 
@@ -403,30 +394,21 @@ curl -i http://127.0.0.1:18080/api/v1/products
 ```
 
 Target: 200 dengan daftar Product dari database cluster. Ulangi POST dan GET
-pada bagian 5 dengan port **18080** untuk seluruh service yang route-nya sudah
-diterapkan. Jangan mengasumsikan ID dari database Compose. Satu port-forward ke
+pada bagian 5 dengan port **18080** untuk seluruh service yang sudah siap.
+Jangan mengasumsikan ID dari database Compose. Satu port-forward ke
 gateway cukup untuk akses ini. Berbeda dari port-forward langsung ke Service
 aplikasi, jalur ini melewati Envoy ingress dan VirtualService:
 
 ```text
-curl localhost:18080 -> Istio ingressgateway -> route service
+curl localhost:18080 -> Istio ingressgateway -> VirtualService ingress
                     -> Pod aplikasi dengan sidecar -> PostgreSQL cluster
 ```
 
 Port-forward gateway masih diperlukan untuk membawa trafik laptop ke cluster
 Docker Desktop; ini belum membuktikan akses LoadBalancer eksternal atau TLS.
-Simpan bukti GET dan POST melalui gateway, bukan hanya status Pod. Setelah route
+Simpan bukti GET dan POST melalui gateway, bukan hanya status Pod. Setelah rute
 baru dipasang, ulangi `istioctl analyze` dan request API. Jangan menyatakan semua
-service selesai sebelum seluruh route dan alur antarservice diuji.
-
-Jika perlu membatalkan route service tanpa menghentikan aplikasinya:
-
-```bash
-minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl delete -f "deploy/istio/${SERVICE}-route.yaml"
-```
-
-Gateway bersama tetap digunakan service lain; jangan menghapusnya untuk
-membatalkan satu route. Perubahan route terpisah dari riwayat rollback Helm.
+service selesai sebelum seluruh rute dan alur antarservice diuji.
 
 ## 7. Jika deployment atau pengujian gagal
 
@@ -471,9 +453,9 @@ Perbarui catatan bukti runtime pada panduan ini berdasarkan output aktual. Bedak
 tersedia, lint/dry-run lolos, rollout Ready, API langsung berhasil, dan ingress
 berhasil. Deployment Ready tidak membuktikan seluruh jenis pengujian tersebut.
 Pengujian kebijakan mTLS/AuthorizationPolicy dan enforcement NetworkPolicy
-merupakan pekerjaan terpisah setelah alur dasar stabil. Chart belum membuat
-ServiceAccount khusus per aplikasi; pisahkan identitas aplikasi sebelum
-otorisasi berdasarkan identitas workload. NetworkPolicy yang tersedia memerlukan
+merupakan pekerjaan terpisah setelah alur dasar stabil. Chart Helm kini sudah membuat ServiceAccount khusus per aplikasi (`abl-<svc>-service-sa`)
+dengan token automount dinonaktifkan, serta mengonfigurasi AuthorizationPolicy
+berbasis identitas workload mTLS antar-service. NetworkPolicy yang tersedia memerlukan
 CNI dengan dukungan enforcement dan pengujian akses diizinkan/ditolak.
 
 Setiap pemilik menyimpan screenshot node Ready, Pod aplikasi dan database,

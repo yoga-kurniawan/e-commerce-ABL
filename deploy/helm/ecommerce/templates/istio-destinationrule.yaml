@@ -24,7 +24,7 @@ spec:
       consecutive5xxErrors: {{ $.Values.istio.circuitBreaker.consecutive5xxErrors | default 3 }}
       interval: {{ $.Values.istio.circuitBreaker.interval | default "10s" }}
       baseEjectionTime: {{ $.Values.istio.circuitBreaker.baseEjectionTime | default "30s" }}
-      maxEjectionPercent: 100
+      maxEjectionPercent: {{ if and $.Values.istio $.Values.istio.circuitBreaker (hasKey $.Values.istio.circuitBreaker "maxEjectionPercent") }}{{ $.Values.istio.circuitBreaker.maxEjectionPercent }}{{ else }}50{{ end }}
 {{- end }}
 {{- end }}
 {{- end }}

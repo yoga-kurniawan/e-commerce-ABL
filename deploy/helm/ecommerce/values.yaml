@@ -67,6 +67,9 @@ istio:
     interval: 10s
     baseEjectionTime: 30s
     maxConnections: 100
+    maxEjectionPercent: 50
+  prometheus:
+    principals: []
   mtlsStrict: true
 
 services:
@@ -103,6 +106,8 @@ services:
       port: 5432
       name: order_db
       existingSecret: order-db-credentials
+    istio:
+      timeout: 15s
   payment:
     enabled: true
     image:

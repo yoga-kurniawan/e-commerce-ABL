@@ -1,6 +1,10 @@
 {{- if .Values.istio.enabled }}
 {{- range $name, $service := .Values.services }}
 {{- if $service.enabled }}
+{{- $timeout := $.Values.istio.timeout | default "10s" }}
+{{- if and $service.istio $service.istio.timeout }}
+{{- $timeout = $service.istio.timeout }}
+{{- end }}
 ---
 apiVersion: networking.istio.io/v1
 kind: VirtualService
@@ -38,7 +42,7 @@ spec:
             host: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
             port:
               number: {{ $.Values.service.port }}
-      timeout: {{ $.Values.istio.timeout | default "10s" }}
+      timeout: {{ $timeout }}
       retries:
         attempts: {{ $.Values.istio.retries.attempts | default 2 }}
         perTryTimeout: {{ $.Values.istio.retries.perTryTimeout | default "3s" }}
@@ -58,7 +62,7 @@ spec:
             host: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
             port:
               number: {{ $.Values.service.port }}
-      timeout: {{ $.Values.istio.timeout | default "10s" }}
+      timeout: {{ $timeout }}
       retries:
         attempts: 0
 ---
@@ -71,7 +75,6 @@ metadata:
     {{- include "ecommerce.serviceLabels" (dict "serviceName" $name "context" $) | nindent 4 }}
 spec:
   hosts:
-    - {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}
     - {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
   gateways:
     - mesh
@@ -99,7 +102,7 @@ spec:
             host: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
             port:
               number: {{ $.Values.service.port }}
-      timeout: {{ $.Values.istio.timeout | default "10s" }}
+      timeout: {{ $timeout }}
       retries:
         attempts: {{ $.Values.istio.retries.attempts | default 2 }}
         perTryTimeout: {{ $.Values.istio.retries.perTryTimeout | default "3s" }}
@@ -119,7 +122,7 @@ spec:
             host: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
             port:
               number: {{ $.Values.service.port }}
-      timeout: {{ $.Values.istio.timeout | default "10s" }}
+      timeout: {{ $timeout }}
       retries:
         attempts: 0
 {{- end }}
