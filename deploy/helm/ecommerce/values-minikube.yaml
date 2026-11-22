@@ -1,0 +1,16 @@
+# Values override specifically tuned for Minikube local deployment (Ubuntu WSL2)
+# Addresses C-08, C-12: Zero-surge rolling updates to prevent OOM/scheduling failures in constrained environments
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi

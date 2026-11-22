@@ -3,6 +3,42 @@
 replicaCount: 1
 imagePullSecrets: []
 imagePullPolicy: IfNotPresent
+
+service:
+  port: 8080
+
+management:
+  port: 9090
+
+javaToolOptions: "-XX:MaxRAMPercentage=50.0 -XX:MaxMetaspaceSize=160m -XX:ReservedCodeCacheSize=48m -Xss256k"
+
+terminationGracePeriodSeconds: 35
+preStopSleepSeconds: 5
+tmpSizeLimit: 64Mi
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%
+
+probes:
+  startup:
+    path: /actuator/health/liveness
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 60
+  readiness:
+    path: /actuator/health/readiness
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 3
+  liveness:
+    path: /actuator/health/liveness
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+
 resources:
   requests:
     cpu: 100m
@@ -10,6 +46,29 @@ resources:
   limits:
     cpu: "1"
     memory: 512Mi
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+  annotations: {}
+
+podAnnotations: {}
+
+istio:
+  enabled: true
+  gateway: istio-system/ecommerce-gateway
+  timeout: 10s
+  retries:
+    attempts: 2
+    perTryTimeout: 3s
+    retryOn: connect-failure,refused-stream,5xx
+  circuitBreaker:
+    consecutive5xxErrors: 3
+    interval: 10s
+    baseEjectionTime: 30s
+    maxConnections: 100
+  mtlsStrict: true
+
 services:
   product:
     enabled: true
@@ -26,7 +85,7 @@ services:
     enabled: true
     image:
       repository: ecommerce/cart-service
-      tag: "0.1.0-local"
+      tag: "0.2.0-local"
       digest: ""
     database:
       host: cart-db
