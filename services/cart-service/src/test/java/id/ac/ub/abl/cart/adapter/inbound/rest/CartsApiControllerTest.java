@@ -2,6 +2,7 @@ package id.ac.ub.abl.cart.adapter.inbound.rest;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import id.ac.ub.abl.cart.adapter.outbound.database.CartsRepository;
 import id.ac.ub.abl.cart.domain.ProductSnapshot;
@@ -16,6 +17,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -69,7 +71,7 @@ class CartsApiControllerTest {
                 .andReturn();
 
         long id = json.readTree(result.getResponse().getContentAsString()).get("id").longValue();
-        assertEquals("http://localhost" + BASE + "/" + id, result.getResponse().getHeader("Location"));
+        assertEquals(BASE + "/" + id, result.getResponse().getHeader("Location"));
         assertEquals(1, repository.count());
     }
 
@@ -281,6 +283,34 @@ class CartsApiControllerTest {
         http.perform(delete(BASE + "/{cartId}/items/999", cartId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    @Test
+    void productLookupRunsOutsideDatabaseTransaction() throws Exception {
+        long cartId = createCart(101L);
+        AtomicBoolean activeDuringLookup = new AtomicBoolean(false);
+        when(productLookup.findById(1L)).thenAnswer(invocation -> {
+            if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                activeDuringLookup.set(true);
+            }
+            return Optional.of(new ProductSnapshot(1L, "Keyboard", new BigDecimal("350000"), 10));
+        });
+
+        http.perform(post(BASE + "/{cartId}/items", cartId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productId\":1,\"quantity\":2}"))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", BASE + "/" + cartId + "/items/1"));
+        http.perform(put(BASE + "/{cartId}/items/1", cartId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":3}"))
+                .andExpect(status().isOk());
+        http.perform(patch(BASE + "/{cartId}/items/1", cartId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":4}"))
+                .andExpect(status().isOk());
+
+        assertFalse(activeDuringLookup.get(), "ProductLookup must never execute inside an active SQL transaction");
     }
 
     private long createCart(Long customerId) throws Exception {

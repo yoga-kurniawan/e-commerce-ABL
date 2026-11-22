@@ -7,7 +7,9 @@ import id.ac.ub.abl.cart.usecase.exception.CartNotFoundException;
 import id.ac.ub.abl.cart.usecase.exception.ProductNotFoundException;
 import id.ac.ub.abl.cart.usecase.exception.ProductServiceUnavailableException;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -93,6 +95,17 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
     }
 
+    @Test
+    void concurrencyAndIntegrityViolationsReturn409Conflict() throws Exception {
+        http.perform(get("/test/optimistic"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONFLICT"))
+                .andExpect(jsonPath("$.stackTrace").doesNotExist());
+        http.perform(get("/test/integrity"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONFLICT"));
+    }
+
     @RestController
     static class FailingController {
         @GetMapping("/test/{kind}")
@@ -104,6 +117,8 @@ class GlobalExceptionHandlerTest {
                 case "product-missing" -> throw new ProductNotFoundException(5L);
                 case "stock-conflict" -> throw new InsufficientStockException("Jumlah melebihi stok yang tersedia");
                 case "dependency-failure" -> throw new ProductServiceUnavailableException("Timeout");
+                case "optimistic" -> throw new ObjectOptimisticLockingFailureException("CartJpaEntity", 10L);
+                case "integrity" -> throw new DataIntegrityViolationException("uq_cart_items_cart_product");
                 default -> throw new IllegalStateException("Internal database detail that must not reach the client");
             }
         }

@@ -61,7 +61,12 @@ public final class Cart {
 
         if (existingItemOpt.isPresent()) {
             CartItem existing = existingItemOpt.get();
-            int newQuantity = existing.getQuantity() + quantity;
+            int newQuantity;
+            try {
+                newQuantity = Math.addExact(existing.getQuantity(), quantity);
+            } catch (ArithmeticException overflow) {
+                throw new InsufficientStockException("Jumlah melebihi stok yang tersedia");
+            }
             if (newQuantity > product.stock()) {
                 throw new InsufficientStockException("Jumlah melebihi stok yang tersedia");
             }
