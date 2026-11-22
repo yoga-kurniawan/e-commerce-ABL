@@ -55,7 +55,7 @@ class OrdersApiControllerSliceTest {
         http.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"cartId\":10,\"customerId\":101}"))
                 .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost/api/v1/orders/501"))
+                .andExpect(header().string("Location", "/api/v1/orders/501"))
                 .andExpect(jsonPath("$.id").value(501))
                 .andExpect(jsonPath("$.customerId").value(101))
                 .andExpect(jsonPath("$.total").value(700000))

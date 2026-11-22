@@ -1,72 +1,103 @@
 package id.ac.ub.abl.order.adapter.outbound.rest;
 
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 import id.ac.ub.abl.order.adapter.outbound.rest.mapper.PaymentRestMapper;
+import id.ac.ub.abl.order.configuration.RestClientConfiguration;
 import id.ac.ub.abl.order.domain.PaymentSnapshot;
 import id.ac.ub.abl.order.usecase.exception.PaymentServiceUnavailableException;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.client.MockRestServiceServer;
-import org.springframework.web.client.RestClient;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.Import;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-/** Stub kontrak GET /api/v2/payments?orderId= (DEC-022) yang belum diimplementasikan Payment Service. */
+/** Client Boot 4 @ImportHttpServices/@HttpExchange untuk Payment Service v2 dengan stub HTTP loopback. */
 class PaymentRestAdapterTest {
-    private static final String URL = "http://payment-service/api/v2/payments?orderId=501";
+    interface Reply { void send(HttpExchange exchange) throws Exception; }
 
-    private MockRestServiceServer mockServer;
-    private PaymentRestAdapter adapter;
+    static final AtomicReference<Reply> REPLY = new AtomicReference<>();
+    static final AtomicReference<String> URI_STR = new AtomicReference<>();
+    static final AtomicReference<String> METHOD = new AtomicReference<>();
+    static HttpServer server;
+    static ExecutorService executor;
+    static ConfigurableApplicationContext context;
+    static PaymentRestAdapter adapter;
+
+    @BeforeAll
+    static void start() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        executor = Executors.newCachedThreadPool();
+        server.setExecutor(executor);
+        server.createContext("/", exchange -> {
+            URI_STR.set(exchange.getRequestURI().toString());
+            METHOD.set(exchange.getRequestMethod());
+            try { REPLY.get().send(exchange); } catch (Exception ignored) { exchange.close(); }
+        });
+        server.start();
+        context = new SpringApplicationBuilder(ClientTestConfiguration.class).web(WebApplicationType.NONE).run(
+                "--clients.payment-url=http://127.0.0.1:" + server.getAddress().getPort(),
+                "--spring.main.banner-mode=off");
+        adapter = context.getBean(PaymentRestAdapter.class);
+    }
+
+    @AfterAll
+    static void stop() {
+        if (context != null) { context.close(); }
+        if (server != null) { server.stop(0); }
+        if (executor != null) { executor.shutdownNow(); }
+    }
 
     @BeforeEach
-    void setUp() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://payment-service");
-        mockServer = MockRestServiceServer.bindTo(builder).build();
-        adapter = new PaymentRestAdapter(builder.build(), new PaymentRestMapper());
+    void reset() {
+        reply(200, "application/json", "[]");
     }
 
     @Test
     void findByOrderId_mapsPaymentHistoryAndIgnoresOtherFields() {
-        mockServer.expect(requestTo(URL))
-                .andExpect(method(HttpMethod.GET))
-                .andRespond(withSuccess("""
-                        [
-                          {"id": 9001, "orderId": 501, "method": "TRANSFER", "status": "FAILED", "amount": 700000},
-                          {"id": 9002, "orderId": 501, "method": "E_WALLET", "status": "PENDING", "amount": 700000,
-                           "transactionReference": "TRX-DEMO-001"}
-                        ]
-                        """, MediaType.APPLICATION_JSON));
+        reply(200, "application/json", """
+                [
+                  {"id": 9001, "orderId": 501, "method": "TRANSFER", "status": "FAILED", "amount": 700000},
+                  {"id": 9002, "orderId": 501, "method": "E_WALLET", "status": "PENDING", "amount": 700000,
+                   "transactionReference": "TRX-DEMO-001"}
+                ]
+                """);
 
         List<PaymentSnapshot> payments = adapter.findByOrderId(501L);
 
+        assertEquals("/api/v2/payments?orderId=501", URI_STR.get());
+        assertEquals("GET", METHOD.get());
         assertEquals(List.of(
                 new PaymentSnapshot(9001L, 501L, PaymentSnapshot.Status.FAILED),
                 new PaymentSnapshot(9002L, 501L, PaymentSnapshot.Status.PENDING)), payments);
-        mockServer.verify();
     }
 
     @Test
     void findByOrderId_withoutPayments_returnsEmptyList() {
-        mockServer.expect(requestTo(URL)).andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
-
         assertTrue(adapter.findByOrderId(501L).isEmpty());
     }
 
     @Test
     void findByOrderId_whenServerErrorOrNotFound_throwsUnavailable() {
-        mockServer.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
+        reply(500, "application/json", "{\"code\":\"INTERNAL_SERVER_ERROR\"}");
         assertThrows(PaymentServiceUnavailableException.class, () -> adapter.findByOrderId(501L));
 
-        mockServer.reset();
-        mockServer.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.NOT_FOUND));
+        reply(404, "application/json", "{\"code\":\"NOT_FOUND\"}");
         assertThrows(PaymentServiceUnavailableException.class, () -> adapter.findByOrderId(501L));
     }
 
@@ -79,9 +110,24 @@ class PaymentRestAdapterTest {
                 "[{\"id\":9001,\"orderId\":501}]",
                 "[{\"orderId\":501,\"status\":\"FAILED\"}]");
         for (String body : invalidBodies) {
-            mockServer.reset();
-            mockServer.expect(requestTo(URL)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+            reply(200, "application/json", body);
             assertThrows(PaymentServiceUnavailableException.class, () -> adapter.findByOrderId(501L), body);
         }
+    }
+
+    static void reply(int status, String contentType, String body) {
+        REPLY.set(exchange -> {
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", contentType);
+            exchange.sendResponseHeaders(status, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    @EnableAutoConfiguration(exclude = DataSourceAutoConfiguration.class)
+    @Import({RestClientConfiguration.class, PaymentRestAdapter.class, PaymentRestMapper.class})
+    static class ClientTestConfiguration {
     }
 }

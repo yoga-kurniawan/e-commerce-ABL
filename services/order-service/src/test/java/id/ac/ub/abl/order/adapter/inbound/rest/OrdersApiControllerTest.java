@@ -28,6 +28,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -59,6 +60,7 @@ class OrdersApiControllerTest {
     @BeforeEach
     void setUp() {
         repository.deleteAll();
+        when(productLookup.findAllByIds(anyList())).thenCallRealMethod();
         when(productLookup.findById(1L)).thenReturn(Optional.of(
                 new ProductSnapshot(1L, "Keyboard Mechanical", new BigDecimal("400000"), 20)));
         when(cartLookup.findById(10L)).thenReturn(Optional.of(new CartSnapshot(10L, 101L,
@@ -86,7 +88,7 @@ class OrdersApiControllerTest {
                 .andReturn();
 
         long id = json.readTree(result.getResponse().getContentAsString()).get("id").longValue();
-        assertEquals("http://localhost" + BASE + "/" + id, result.getResponse().getHeader("Location"));
+        assertEquals(BASE + "/" + id, result.getResponse().getHeader("Location"));
         var item = jdbc.queryForMap("SELECT product_name, quantity, unit_price FROM order_items WHERE order_id = ?", id);
         assertEquals("Keyboard Mechanical", item.get("product_name"));
         assertEquals(2, item.get("quantity"));

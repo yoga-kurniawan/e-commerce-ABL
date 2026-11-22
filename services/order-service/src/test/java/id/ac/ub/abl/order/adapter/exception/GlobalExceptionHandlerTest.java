@@ -13,7 +13,9 @@ import id.ac.ub.abl.order.usecase.exception.ProductUnavailableException;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,6 +39,8 @@ class GlobalExceptionHandlerTest {
             "product-unavailable, 409, CONFLICT",
             "stock, 409, CONFLICT",
             "not-modifiable, 409, CONFLICT",
+            "optimistic-lock, 409, CONFLICT",
+            "data-integrity, 409, CONFLICT",
             "domain, 400, BAD_REQUEST",
             "cart-down, 503, SERVICE_UNAVAILABLE",
             "product-down, 503, SERVICE_UNAVAILABLE",
@@ -86,6 +90,8 @@ class GlobalExceptionHandlerTest {
                 case "stock" -> new InsufficientStockException(1L);
                 case "not-modifiable" -> new OrderNotModifiableException(
                         "Alamat pengiriman tidak dapat diubah pada pesanan berstatus CONFIRMED");
+                case "optimistic-lock" -> new ObjectOptimisticLockingFailureException("OrderJpaEntity", 1L);
+                case "data-integrity" -> new DataIntegrityViolationException("duplicate key");
                 case "domain" -> new DomainRuleViolation("Alamat pengiriman tidak boleh kosong");
                 case "cart-down" -> new CartServiceUnavailableException("connection refused at 10.0.0.1", null);
                 case "product-down" -> new ProductServiceUnavailableException("timeout", null);

@@ -2,7 +2,9 @@ package id.ac.ub.abl.order.usecase.service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import id.ac.ub.abl.order.domain.CartItemSnapshot;
 import id.ac.ub.abl.order.domain.CartSnapshot;
@@ -46,9 +48,12 @@ public class CreateOrderUseCase {
             throw new EmptyCartException(command.cartId());
         }
 
+        List<Long> productIds = cart.items().stream().map(CartItemSnapshot::productId).distinct().toList();
+        Map<Long, Optional<ProductSnapshot>> products = productLookup.findAllByIds(productIds);
+
         List<OrderItem> items = new ArrayList<>();
         for (CartItemSnapshot cartItem : cart.items()) {
-            ProductSnapshot product = productLookup.findById(cartItem.productId())
+            ProductSnapshot product = products.getOrDefault(cartItem.productId(), Optional.empty())
                     .orElseThrow(() -> new ProductUnavailableException(cartItem.productId()));
             if (cartItem.quantity() > product.stock()) {
                 throw new InsufficientStockException(cartItem.productId());

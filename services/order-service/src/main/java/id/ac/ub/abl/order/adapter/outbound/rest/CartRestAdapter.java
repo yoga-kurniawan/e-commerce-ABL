@@ -10,40 +10,39 @@ import id.ac.ub.abl.order.usecase.exception.CartServiceUnavailableException;
 import id.ac.ub.abl.order.usecase.port.out.CartLookup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 @Component
 public class CartRestAdapter implements CartLookup {
     private static final Logger LOG = LoggerFactory.getLogger(CartRestAdapter.class);
 
-    private final RestClient restClient;
+    private final CartApiClient client;
     private final CartRestMapper mapper;
 
-    public CartRestAdapter(@Qualifier("cartRestClient") RestClient restClient, CartRestMapper mapper) {
-        this.restClient = restClient;
+    public CartRestAdapter(CartApiClient client, CartRestMapper mapper) {
+        this.client = client;
         this.mapper = mapper;
     }
 
     @Override
     public Optional<CartSnapshot> findById(Long cartId) {
-        CartResponse response;
+        ResponseEntity<CartResponse> response;
         try {
-            response = restClient.get()
-                    .uri("/api/v1/carts/{cartId}", cartId)
-                    .retrieve()
-                    .body(CartResponse.class);
+            response = client.getById(cartId);
         } catch (HttpClientErrorException.NotFound ex) {
             return Optional.empty();
         } catch (RestClientException ex) {
             LOG.error("Gagal menghubungi Cart Service untuk cartId: {}", cartId, ex);
             throw new CartServiceUnavailableException("Gagal menghubungi Cart Service", ex);
         }
+        if (response.getStatusCode().value() != 200 || response.getBody() == null) {
+            throw new CartServiceUnavailableException("Respons Cart Service tidak sesuai kontrak", null);
+        }
         try {
-            return Optional.ofNullable(response).map(mapper::toSnapshot);
+            return Optional.of(mapper.toSnapshot(response.getBody()));
         } catch (DomainRuleViolation ex) {
             throw new CartServiceUnavailableException("Respons Cart Service tidak valid", ex);
         }

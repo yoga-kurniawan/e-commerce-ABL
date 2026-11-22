@@ -12,7 +12,7 @@ import id.ac.ub.abl.order.usecase.service.GetOrderUseCase;
 import id.ac.ub.abl.order.usecase.service.PatchOrderUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @RestController
 public class OrdersApiController implements OrdersApi {
@@ -34,8 +34,8 @@ public class OrdersApiController implements OrdersApi {
     @Override
     public ResponseEntity<OrderOutput> createOrder(OrderInput input) {
         Order order = createOrder.execute(mapper.toCreateCommand(input));
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{orderId}").buildAndExpand(order.getId()).toUri();
+        URI location = UriComponentsBuilder.fromPath("/api/v1/orders/{orderId}")
+                .buildAndExpand(order.getId()).toUri();
         return ResponseEntity.created(location).body(mapper.toOutput(order));
     }
 

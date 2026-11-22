@@ -29,6 +29,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -67,6 +68,7 @@ class OrderApplicationTests {
         when(cartLookup.findById(10L)).thenReturn(Optional.of(new CartSnapshot(10L, 101L, List.of(
                 new CartItemSnapshot(1L, 2, new BigDecimal("700000")),
                 new CartItemSnapshot(2L, 1, new BigDecimal("150000"))))));
+        when(productLookup.findAllByIds(anyList())).thenCallRealMethod();
         when(productLookup.findById(1L)).thenReturn(Optional.of(
                 new ProductSnapshot(1L, "Keyboard", new BigDecimal("350000"), 10)));
         when(productLookup.findById(2L)).thenReturn(Optional.of(
@@ -76,12 +78,13 @@ class OrderApplicationTests {
         var created = send(client, "POST", "", "{\"cartId\":10,\"customerId\":101}", 201);
         var order = json.readTree(created.body());
         long orderId = order.get("id").longValue();
-        assertEquals("http://localhost:" + port + "/api/v1/orders/" + orderId,
+        assertEquals("/api/v1/orders/" + orderId,
                 created.headers().firstValue("Location").orElseThrow());
         assertEquals(850000, order.get("total").intValue());
         assertEquals("PENDING", order.get("status").stringValue());
 
         // 2. Catalog price changes do not affect the stored order
+        when(productLookup.findAllByIds(anyList())).thenCallRealMethod();
         when(productLookup.findById(1L)).thenReturn(Optional.of(
                 new ProductSnapshot(1L, "Keyboard", new BigDecimal("999999"), 10)));
         var fetched = json.readTree(send(client, "GET", "/" + orderId, null, 200).body());
