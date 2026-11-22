@@ -50,7 +50,9 @@ class OrderRestAdapterTest {
     static ConfigurableApplicationContext startContext(int port, String readTimeout) {
         return new SpringApplicationBuilder(ClientTestConfiguration.class).web(WebApplicationType.NONE).run(
                 "--clients.order-url=http://127.0.0.1:" + port,
-                "--spring.http.serviceclient.orders.read-timeout=" + readTimeout, "--spring.main.banner-mode=off");
+                "--spring.http.serviceclient.orders.read-timeout=" + readTimeout,
+                "--management.endpoint.health.group.readiness.include=readinessState",
+                "--spring.main.banner-mode=off");
     }
     @AfterAll static void stop() {
         if (context != null) { context.close(); }

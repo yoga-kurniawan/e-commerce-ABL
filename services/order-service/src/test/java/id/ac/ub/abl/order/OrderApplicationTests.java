@@ -100,6 +100,31 @@ class OrderApplicationTests {
         send(client, "DELETE", "/" + orderId, null, 405);
     }
 
+    @Test
+    void healthReadinessAndPrometheusReturnOk() throws Exception {
+        var client = HttpClient.newHttpClient();
+        var health = client.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/actuator/health/readiness")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, health.statusCode());
+        assertTrue(health.body().contains("UP"));
+
+        var prometheus = client.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/actuator/prometheus")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, prometheus.statusCode());
+        assertTrue(prometheus.body().contains("jvm_"));
+    }
+
+    @Test
+    void duplicateJsonKeysAreRejectedWithBadRequest() throws Exception {
+        var client = HttpClient.newHttpClient();
+        var duplicatePayload = """
+                {"customerId": 1, "customerId": 2, "cartId": 1, "shippingAddress": "Jl. Veteran No. 8, Malang"}
+                """;
+        send(client, "POST", "", duplicatePayload, 400);
+    }
+
     private HttpResponse<String> send(HttpClient client, String method, String path,
                                       String body, int expectedStatus) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/orders" + path))

@@ -52,6 +52,7 @@ class PaymentRestAdapterTest {
         server.start();
         context = new SpringApplicationBuilder(ClientTestConfiguration.class).web(WebApplicationType.NONE).run(
                 "--clients.payment-url=http://127.0.0.1:" + server.getAddress().getPort(),
+                "--management.endpoint.health.group.readiness.include=readinessState",
                 "--spring.main.banner-mode=off");
         adapter = context.getBean(PaymentRestAdapter.class);
     }

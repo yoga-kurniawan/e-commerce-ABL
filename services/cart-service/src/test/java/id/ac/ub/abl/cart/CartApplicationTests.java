@@ -105,6 +105,34 @@ class CartApplicationTests {
         assertEquals(150000, finalCart.get("total").intValue());
     }
 
+    @Test
+    void healthReadinessAndPrometheusReturnOk() throws Exception {
+        var client = HttpClient.newHttpClient();
+        var health = client.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/actuator/health/readiness")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, health.statusCode());
+        assertTrue(health.body().contains("UP"));
+
+        var prometheus = client.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/actuator/prometheus")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, prometheus.statusCode());
+        assertTrue(prometheus.body().contains("jvm_"));
+    }
+
+    @Test
+    void duplicateJsonKeysAreRejectedWithBadRequest() throws Exception {
+        var client = HttpClient.newHttpClient();
+        var cart = json.readTree(send(client, "POST", "", "{\"customerId\": 1}", 201).body());
+        long cartId = cart.get("id").longValue();
+
+        var duplicatePayload = """
+                {"productId": 1, "productId": 2, "quantity": 1}
+                """;
+        send(client, "POST", "/" + cartId + "/items", duplicatePayload, 400);
+    }
+
     private HttpResponse<String> send(HttpClient client, String method, String path,
                                       String body, int expectedStatus) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/carts" + path))

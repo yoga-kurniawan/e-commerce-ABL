@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import id.ac.ub.abl.order.adapter.outbound.rest.mapper.ProductRestMapper;
+import id.ac.ub.abl.order.configuration.CorrelationHeaderPropagationConfiguration;
 import id.ac.ub.abl.order.configuration.RestClientConfiguration;
 import id.ac.ub.abl.order.domain.ProductSnapshot;
 import id.ac.ub.abl.order.usecase.exception.ProductServiceUnavailableException;
@@ -44,6 +45,7 @@ class ProductRestAdapterTest {
     static final AtomicReference<Reply> REPLY = new AtomicReference<>();
     static final AtomicReference<String> PATH = new AtomicReference<>();
     static final AtomicReference<String> METHOD = new AtomicReference<>();
+    static final AtomicReference<com.sun.net.httpserver.Headers> HEADERS = new AtomicReference<>();
     static HttpServer server;
     static ExecutorService executor;
     static ConfigurableApplicationContext context;
@@ -57,11 +59,13 @@ class ProductRestAdapterTest {
         server.createContext("/", exchange -> {
             PATH.set(exchange.getRequestURI().getPath());
             METHOD.set(exchange.getRequestMethod());
+            HEADERS.set(exchange.getRequestHeaders());
             try { REPLY.get().send(exchange); } catch (Exception ignored) { exchange.close(); }
         });
         server.start();
         context = new SpringApplicationBuilder(ClientTestConfiguration.class).web(WebApplicationType.NONE).run(
                 "--clients.product-url=http://127.0.0.1:" + server.getAddress().getPort(),
+                "--management.endpoint.health.group.readiness.include=readinessState",
                 "--spring.main.banner-mode=off");
         adapter = context.getBean(ProductRestAdapter.class);
     }
@@ -185,6 +189,20 @@ class ProductRestAdapterTest {
         assertTrue(seenThread.get().startsWith("product-lookup-"));
     }
 
+    @Test
+    void findById_propagatesCorrelationHeaderAndTracing() {
+        var request = new MockHttpServletRequest();
+        request.addHeader("x-request-id", "order-req-456");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        try {
+            adapter.findById(1L);
+            assertEquals("order-req-456", HEADERS.get().getFirst("x-request-id"));
+            assertNotNull(HEADERS.get().getFirst("traceparent"));
+        } finally {
+            RequestContextHolder.resetRequestAttributes();
+        }
+    }
+
     static void reply(int status, String contentType, String body) {
         REPLY.set(exchange -> {
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
@@ -197,7 +215,7 @@ class ProductRestAdapterTest {
 
     @TestConfiguration(proxyBeanMethods = false)
     @EnableAutoConfiguration(exclude = DataSourceAutoConfiguration.class)
-    @Import({RestClientConfiguration.class, ProductRestAdapter.class, ProductRestMapper.class})
+    @Import({RestClientConfiguration.class, CorrelationHeaderPropagationConfiguration.class, ProductRestAdapter.class, ProductRestMapper.class})
     static class ClientTestConfiguration {
     }
 }

@@ -98,6 +98,33 @@ class ProductApplicationTests {
         assertEquals(1, repository.count());
     }
 
+    @Test
+    void healthReadinessAndPrometheusReturnOk() throws Exception {
+        var client = HttpClient.newHttpClient();
+
+        var health = client.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/actuator/health/readiness")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, health.statusCode());
+        assertTrue(health.body().contains("UP"));
+
+        var prometheus = client.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/actuator/prometheus")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, prometheus.statusCode());
+        assertTrue(prometheus.body().contains("jvm_"));
+    }
+
+    @Test
+    void duplicateJsonKeysAreRejectedWithBadRequest() throws Exception {
+        var client = HttpClient.newHttpClient();
+        var duplicatePayload = """
+                {"name": "Mouse", "name": "Mouse Dupe", "price": 100000, "stock": 10}
+                """;
+        var response = send(client, "POST", "", duplicatePayload, 400);
+        assertError(response, "BAD_REQUEST");
+    }
+
     private HttpResponse<String> send(HttpClient client, String method, String path,
                                       String body, int expectedStatus) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/products" + path))

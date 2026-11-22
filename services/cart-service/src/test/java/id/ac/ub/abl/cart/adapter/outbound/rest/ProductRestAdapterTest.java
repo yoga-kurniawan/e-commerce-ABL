@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import id.ac.ub.abl.cart.adapter.outbound.rest.mapper.ProductRestMapper;
+import id.ac.ub.abl.cart.configuration.CorrelationHeaderPropagationConfiguration;
 import id.ac.ub.abl.cart.configuration.ProductClientConfiguration;
 import id.ac.ub.abl.cart.domain.ProductSnapshot;
 import id.ac.ub.abl.cart.usecase.exception.ProductServiceUnavailableException;
@@ -38,6 +39,7 @@ class ProductRestAdapterTest {
     static final AtomicReference<Reply> REPLY = new AtomicReference<>();
     static final AtomicReference<String> PATH = new AtomicReference<>();
     static final AtomicReference<String> METHOD = new AtomicReference<>();
+    static final AtomicReference<com.sun.net.httpserver.Headers> HEADERS = new AtomicReference<>();
     static HttpServer server;
     static ExecutorService executor;
     static ConfigurableApplicationContext context;
@@ -51,6 +53,7 @@ class ProductRestAdapterTest {
         server.createContext("/", exchange -> {
             PATH.set(exchange.getRequestURI().getPath());
             METHOD.set(exchange.getRequestMethod());
+            HEADERS.set(exchange.getRequestHeaders());
             try { REPLY.get().send(exchange); } catch (Exception ignored) { exchange.close(); }
         });
         server.start();
@@ -62,6 +65,7 @@ class ProductRestAdapterTest {
         return new SpringApplicationBuilder(ClientTestConfiguration.class).web(WebApplicationType.NONE).run(
                 "--clients.product-url=http://127.0.0.1:" + port,
                 "--spring.http.serviceclient.products.read-timeout=" + readTimeout,
+                "--management.endpoint.health.group.readiness.include=readinessState",
                 "--spring.main.banner-mode=off");
     }
 
@@ -129,6 +133,21 @@ class ProductRestAdapterTest {
         }
     }
 
+    @Test
+    void findById_propagatesCorrelationHeaderAndTracing() {
+        var request = new org.springframework.mock.web.MockHttpServletRequest();
+        request.addHeader("x-request-id", "cart-req-123");
+        org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+                new org.springframework.web.context.request.ServletRequestAttributes(request));
+        try {
+            adapter.findById(1L);
+            assertThat(HEADERS.get().getFirst("x-request-id")).isEqualTo("cart-req-123");
+            assertThat(HEADERS.get().getFirst("traceparent")).isNotBlank();
+        } finally {
+            org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+        }
+    }
+
     private static void reply(int status, String contentType, String body) {
         REPLY.set(exchange -> {
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
@@ -141,6 +160,6 @@ class ProductRestAdapterTest {
 
     @TestConfiguration(proxyBeanMethods = false)
     @EnableAutoConfiguration(exclude = DataSourceAutoConfiguration.class)
-    @Import({ProductClientConfiguration.class, ProductRestAdapter.class, ProductRestMapper.class})
+    @Import({ProductClientConfiguration.class, CorrelationHeaderPropagationConfiguration.class, ProductRestAdapter.class, ProductRestMapper.class})
     static class ClientTestConfiguration { }
 }
