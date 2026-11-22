@@ -16,6 +16,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Component
 public class PaymentTransactions {
     private final TransactionTemplate transactions;
+    private final TransactionTemplate readOnlyTransactions;
     private final PaymentDatabaseSession session;
     private final Duration lockBudget;
     private final Duration lease;
@@ -28,6 +29,10 @@ public class PaymentTransactions {
         this.lease = Duration.ofMillis(leaseMillis);
         this.transactions = new TransactionTemplate(manager);
         this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.readOnlyTransactions = new TransactionTemplate(manager);
+        this.readOnlyTransactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+        this.readOnlyTransactions.setReadOnly(true);
+        this.readOnlyTransactions.setTimeout((int) Math.max(1, (lockMillis + 999) / 1000));
     }
     public Duration lease() { return lease; }
     public <T> T creation(Supplier<T> action) {
@@ -75,6 +80,18 @@ public class PaymentTransactions {
                 }
             }
             // Termasuk hasil commit ambigu. Tidak pernah menghapus klaim atau menyatakan Payment FAILED.
+            throw new PaymentOperationException("DEPENDENCY_UNAVAILABLE", "Hasil database perlu diperiksa kembali menggunakan key yang sama", failure);
+        }
+    }
+    public <T> T runReadOnly(String failureCode, Supplier<T> action) {
+        try {
+            return readOnlyTransactions.execute(tx -> action.get());
+        } catch (DataAccessException | TransactionException failure) {
+            for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+                if (cause instanceof SQLException sql && "55P03".equals(sql.getSQLState())) {
+                    throw new PaymentOperationException(failureCode, "Operasi pembayaran sedang diproses", failure);
+                }
+            }
             throw new PaymentOperationException("DEPENDENCY_UNAVAILABLE", "Hasil database perlu diperiksa kembali menggunakan key yang sama", failure);
         }
     }
