@@ -58,16 +58,27 @@ Script memakai identitas tetap agar sesuai dengan manifest yang tersedia:
 - Namespace komponen Istio/Gateway: `istio-system`.
 
 Siapkan akses internet untuk registry Docker, repository Maven, dan image Istio.
-Default awal `init` adalah 2 CPU/3000 MB jika cluster belum Running. Ini pernah
-menjalankan Product beserta database dan Istio, belum membuktikan cukup untuk
-empat aplikasi/database/sidecar. Untuk cluster baru, sesuaikan kapasitas, contoh
-jika komputer memiliki resource yang cukup:
+Default awal `init` adalah 4 CPU/5120 MB jika cluster belum Running.
+Untuk pengguna Windows WSL2, disarankan mengonfigurasi `%UserProfile%\.wslconfig`:
 
-```bash
-LOCAL_CPUS=4 LOCAL_MEMORY=6144mb bash scripts/deploy-local.sh init
+```ini
+[wsl2]
+memory=8GB
+processors=4
 ```
 
-Angka 4 CPU/6144 MB adalah contoh alokasi, bukan hasil pengukuran kebutuhan.
+Alokasi CPU dan memori Minikube dapat disesuaikan melalui environment variable:
+
+```bash
+LOCAL_CPUS=4 LOCAL_MEMORY=5120mb bash scripts/deploy-local.sh init
+```
+
+Jika membutuhkan NetworkPolicy enforcement di Minikube, CNI kustom seperti Calico dapat ditentukan melalui `LOCAL_CNI`:
+
+```bash
+LOCAL_CNI=calico bash scripts/deploy-local.sh init
+```
+
 Environment tersebut diteruskan ke `minikube start` ketika cluster tidak Running;
 tidak mengubah alokasi cluster yang sedang Running. Untuk cluster lama yang
 dihentikan, perhatikan konfigurasi profile sebelum menjalankan init kembali.
@@ -188,11 +199,11 @@ Urutan otomatis `up`:
 
 1. Periksa cluster, komponen Istio, dan risiko penurunan stage.
 2. Ambil values release sebelumnya agar override image/resource tetap dipakai.
-3. Build seluruh aplikasi pada stage dengan tag unik, lalu load image ke Minikube.
-4. Helm lint, render, dan server dry-run dengan values yang sama seperti install.
-5. Pastikan namespace, gunakan/buat Secret, apply database, tunggu database Ready.
+3. Build aplikasi pada stage dengan tag unik (atau hanya satu service jika memakai `--only`), lalu load image ke Minikube.
+4. Helm lint, render, dan server dry-run dengan `values-minikube.yaml` serta file stage yang sesuai.
+5. Pastikan namespace, gunakan/buat Secret, apply database dengan resource optimal, tunggu database Ready.
 6. Helm upgrade/install dan tunggu aplikasi Ready.
-7. Apply Gateway serta route untuk seluruh aplikasi pada stage, lalu Istio analyze.
+7. Apply Gateway `deploy/istio/gateway.yaml`, bersihkan legacy unmanaged route jika ada, lalu Istio analyze.
 
 Jika ada kegagalan, script berhenti. Langkah yang sebelumnya berhasil bisa sudah
 mengubah cluster; tidak ada transaksi tunggal atau rollback otomatis seluruh alur.
@@ -210,7 +221,16 @@ bash scripts/deploy-local.sh up product
 bash scripts/deploy-local.sh up payment
 ```
 
-Script membangun ulang seluruh aplikasi yang termasuk stage dengan tag baru,
+Untuk mempercepat iterasi lokal saat hanya satu service yang diubah, gunakan flag `--only=<service>`:
+
+```bash
+# Membangun dan memuat HANYA cart-service pada stage payment:
+bash scripts/deploy-local.sh up payment --only=cart
+```
+
+Flag `--only` hanya membangun dan memuat image untuk service yang ditentukan, sedangkan service lain dalam stage menggunakan image yang sudah ada di cluster.
+
+Script membangun ulang seluruh aplikasi yang termasuk stage dengan tag baru (kecuali memakai `--only`),
 sehingga Helm memicu rollout image baru. Secret dan PVC dipakai kembali. Tidak
 perlu mengulangi command database atau image load satu per satu. Ini bukan hot
 reload: perubahan kode harus sudah ada di checkout WSL yang menjadi build context.
@@ -257,65 +277,35 @@ dipilih otomatis, sehingga tidak perlu membuka gateway manual:
 bash scripts/deploy-local.sh check
 ```
 
-`check` memeriksa GET daftar Product melalui ingress, tidak membuat data uji.
-Port-forward sementara dihentikan saat script berakhir. Ini smoke test HTTP
-Product; belum menguji POST/PUT/PATCH/DELETE, alur Cart/Order/Payment, idempotency,
-atau persistensi setelah restart. Gunakan
+`check` secara dinamis memeriksa endpoint GET lintas semua service yang sedang aktif pada release `abl`:
+- `/api/v1/products` dan `/api/v2/products` (selalu diperiksa).
+- `/api/v2/orders?customerId=1` (jika `order-service` aktif).
+- `/api/v2/payments?orderId=1` (jika `payment-service` aktif).
+
+Port-forward sementara dihentikan saat script berakhir. Ini smoke test HTTP ingress gateway; belum menguji POST/PUT/PATCH/DELETE atau alur transaksi multi-service. Gunakan
 [panduan tim](../docs/panduan-deployment-tim.md) untuk pengujian bisnis lengkap.
 
-### Payment v1 dan v2 melalui gateway yang sama
+### Port Management Actuator Terisolasi (Port 9090)
 
-`istio/payment-route.yaml` meneruskan exact `/api/v1/payments` dan
-`/api/v2/payments`, serta prefix `/api/v1/payments/` dan `/api/v2/payments/`,
-ke `abl-payment-service.ecommerce.svc.cluster.local:8080` tanpa rewrite path.
-Kedua versi memakai aplikasi, Service, database, dan Secret yang sama.
+Pada Kubernetes, port Actuator (`/actuator/health`, `/actuator/prometheus`) dipisahkan ke management port `9090` terisolasi, sedangkan port bisnis aplikasi adalah `8080`. Gateway Ingress `18080` dan Service Kubernetes bisnis tidak mengekspos endpoint `/actuator/*`.
 
-Pastikan checkout WSL sudah berisi adapter HTTP v2 dan manifest terbaru. Jika
-image aplikasi belum memuat v2, bangun dan deploy ulang seluruh stage Payment:
+Untuk memeriksa readiness probe dan metrik Prometheus secara langsung:
 
 ```bash
-bash scripts/deploy-local.sh up payment
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce port-forward deployment/abl-product-service 19090:9090
 ```
 
-Script sudah melakukan server dry-run dan apply manifest route Payment setelah
-rollout aplikasi. Jika image v2 sudah terpasang dan hanya route yang berubah,
-cukup terapkan manifest tersebut dari WSL tanpa rebuild:
+Lalu uji dari terminal lain:
 
 ```bash
-# Simpan route cluster sebelum apply untuk rollback (jika sudah ada).
-minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce get virtualservice payment-route -o yaml > /tmp/payment-route-before.yaml
-minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply --dry-run=server -f deploy/istio/payment-route.yaml
-minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply -f deploy/istio/payment-route.yaml
-istioctl analyze --context=ecommerce-abl -n ecommerce
-minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce get virtualservice payment-route -o yaml
+curl -i http://127.0.0.1:19090/actuator/health/readiness
+curl -i http://127.0.0.1:19090/actuator/prometheus
 ```
 
-Jalankan `bash scripts/deploy-local.sh gateway` di terminal terpisah, lalu:
+### Kebijakan Mesh & Route Istio di Helm
 
-```bash
-# Ganti dengan ID Order dan Payment dari database cluster lokal.
-ORDER_ID=1
-PAYMENT_ID=1
-curl -i "http://127.0.0.1:18080/api/v1/payments/${PAYMENT_ID}"
-curl -i "http://127.0.0.1:18080/api/v2/payments/${PAYMENT_ID}"
-curl -i "http://127.0.0.1:18080/api/v2/payments?orderId=${ORDER_ID}"
-```
-
-Target detail: 200 untuk Payment yang ada. Target list: 200, ID menaik,
-atau `[]` bila Order belum memiliki Payment. GET list hanya tersedia pada v2.
-Status Pod Ready atau validasi YAML saja belum membuktikan akses gateway.
-
-Untuk rollback route saja, gunakan snapshot route cluster yang disimpan sebelum
-apply di atas. Pastikan file backup berisi VirtualService sebelum memulihkannya:
-
-```bash
-minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl apply -f /tmp/payment-route-before.yaml
-istioctl analyze --context=ecommerce-abl -n ecommerce
-```
-
-Jika route sebelumnya belum ada, command backup gagal; jangan gunakan file kosong
-untuk rollback. Rollback Helm tidak memulihkan VirtualService yang dikelola
-terpisah ini.
+Seluruh kebijakan Istio (`VirtualService`, `DestinationRule`, `PeerAuthentication STRICT`, dan `AuthorizationPolicy`) kini dikelola secara deklaratif oleh template Helm (`deploy/helm/ecommerce/templates/istio-*.yaml`) dengan `-f deploy/helm/ecommerce/values-minikube.yaml`.
+Ingress route otomatis meneruskan trafik `/api/v1/*` dan `/api/v2/*` ke service yang sesuai tanpa membutuhkan file rute statis terpisah. Safe retries otomatis diterapkan untuk metode idempoten (`GET`, `HEAD`) dan dinonaktifkan (`attempts: 0`) untuk metode mutasi (`POST`, `PUT`, `PATCH`, `DELETE`).
 
 ## 5. Jika gagal dan rollback
 

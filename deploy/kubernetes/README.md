@@ -44,7 +44,9 @@ Hasil yang dituju: Pod `<service>-db-0` berstatus `1/1 Running`, PVC
 `data-<service>-db-0` berstatus `Bound`, serta Service `<service>-db` port 5432.
 Service memakai `clusterIP: None` (headless); ini sesuai rancangan StatefulSet.
 Database dan aplikasi berada di namespace `ecommerce`. Database tidak memakai
-sidecar karena template Pod menonaktifkan injeksi Istio.
+sidecar karena template Pod menonaktifkan injeksi Istio. Setiap instance PostgreSQL
+dikonfigurasi dengan parameter optimal Minikube (`shared_buffers=32MB`, `max_connections=30`, `work_mem=2MB`)
+dan alokasi resource hemat CPU (`requests.cpu: 50m`, `requests.memory: 128Mi`).
 NetworkPolicy membatasi ingress ke database dari Pod aplikasi terkait jika CNI mendukung
 penegakan NetworkPolicy. CNI kindnet bawaan Minikube tidak memberikan jaminan
 penegakan tersebut.

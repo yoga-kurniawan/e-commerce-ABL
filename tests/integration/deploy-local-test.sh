@@ -7,23 +7,29 @@ trap 'rm -rf -- "$scratch"' EXIT
 mkdir -p "$scratch/bin" "$scratch/repo/scripts"
 cp "$ROOT/scripts/deploy-local.sh" "$scratch/repo/scripts/"
 export MOCK_LOG="$scratch/commands.log"
+export MOCK_SCRATCH="$scratch"
 export PATH="$scratch/bin:$PATH"
 
 cat > "$scratch/bin/minikube" <<'STUB'
 #!/usr/bin/env bash
 printf 'minikube %s\n' "$*" >> "$MOCK_LOG"
 case " $* " in
+  *' start '*) : > "$MOCK_SCRATCH/minikube_started" ;;
   *' port-forward '*)
     [[ ${MOCK_FORWARD_FAIL:-false} != true ]] || exit 1
     echo 'Forwarding from 127.0.0.1:19191 -> 8080'
     echo "FORWARD_PID=$$" >> "$MOCK_LOG"
     while :; do sleep 1; done
     ;;
+  *' rollout status '*) [[ ${MOCK_ROLLOUT_FAIL:-false} != true ]] || exit 1 ;;
+  *' status '*)
+    if [[ -f "$MOCK_SCRATCH/minikube_started" ]]; then exit 0; fi
+    [[ ${MOCK_MINIKUBE_RUNNING:-true} == true ]] || exit 1
+    ;;
   *' get deployments '*) printf '%s\n' "${MOCK_DEPLOYMENTS:-}" ;;
   *' get secret '*go-template*) printf '%s\n' "${MOCK_SECRET_KEYS:-username password}" ;;
   *' get secret '*) [[ ${MOCK_MISSING_SECRET:-false} == true ]] || echo secret/existing ;;
   *' get pvc '*) [[ ${MOCK_EXISTING_PVC:-false} != true ]] || echo persistentvolumeclaim/existing ;;
-  *' rollout status '*) [[ ${MOCK_ROLLOUT_FAIL:-false} != true ]] || exit 1 ;;
   *' get deployment istiod '*) echo deployment.apps/istiod ;;
 esac
 STUB
@@ -97,9 +103,10 @@ unset MOCK_DEPLOYMENTS
 run_script up cart --skip-build || fail 'cumulative cart'
 contains 'statefulset/product-db'; contains 'statefulset/cart-db'
 contains 'stages/cart.yaml'; contains 'preserved previous image override'
-contains 'istio/cart-route.yaml'
+contains 'values-minikube.yaml'; contains 'istio/gateway.yaml'
+contains 'delete virtualservice product-route cart-route order-route payment-route'
 absent 'statefulset/order-db'; absent 'docker build'; absent 'create secret'
-ok 'cumulative stage preserves prior values and existing secrets'
+ok 'cumulative stage preserves prior values and applies gateway without legacy routes'
 
 export MOCK_LINT_FAIL=true
 if run_script up product --skip-build; then fail 'lint failure ignored'; fi
@@ -127,7 +134,7 @@ unset MOCK_MISSING_SECRET
 
 export MOCK_ROLLOUT_FAIL=true
 if run_script up product --skip-build; then fail 'rollout failure ignored'; fi
-absent 'helm upgrade'; absent 'istio/product-route.yaml'
+absent 'helm upgrade'; absent 'istio/gateway.yaml'
 ok 'database rollout failure stops application and ingress deployment'
 unset MOCK_ROLLOUT_FAIL
 
@@ -136,10 +143,28 @@ contains 'docker build'; contains 'image load ecommerce/product-service:local-'
 contains 'services.product.image.digest='
 ok 'build uses a new image tag and clears a previous digest override'
 
+run_script up cart --only=cart || fail 'selective build'
+contains 'services/cart-service/Dockerfile'
+absent 'services/product-service/Dockerfile'
+ok 'selective build builds only the specified service'
+
+if run_script up cart --only=order; then fail 'invalid service for stage accepted'; fi
+ok 'selective build rejects service not in stage'
+
+if run_script up cart --skip-build --only=cart; then fail 'conflicting options accepted'; fi
+ok 'conflicting --skip-build and --only rejected'
+
 run_script init || fail init
 absent 'istioctl install'
 contains 'namespace.yaml'
 ok 'init retains the existing Istio installation'
+
+MOCK_MINIKUBE_RUNNING=false LOCAL_CNI=calico run_script init || fail 'init with CNI'
+contains 'start -p ecommerce-abl'
+contains '--cpus=4'
+contains '--memory=5120mb'
+contains '--cni=calico'
+ok 'init starts cluster with default 4CPU/5120MB and custom CNI'
 
 run_script check || fail check
 contains 'http://127.0.0.1:19191/api/v1/products'
@@ -147,6 +172,15 @@ contains 'http://127.0.0.1:19191/api/v2/products'
 child_pid=$(sed -n 's/^FORWARD_PID=//p' "$MOCK_LOG")
 if kill -0 "$child_pid" 2>/dev/null; then fail 'temporary forward left running'; fi
 ok 'gateway GET check uses an ephemeral port and cleans up forwarding'
+
+export MOCK_DEPLOYMENTS="abl-product-service
+abl-order-service
+abl-payment-service"
+run_script check || fail 'check active services'
+contains 'http://127.0.0.1:19191/api/v2/orders?customerId=1'
+contains 'http://127.0.0.1:19191/api/v2/payments?orderId=1'
+ok 'gateway check tests all active services'
+unset MOCK_DEPLOYMENTS
 
 export MOCK_HTTP_STATUS=302
 if run_script check; then fail 'HTTP redirect accepted as success'; fi

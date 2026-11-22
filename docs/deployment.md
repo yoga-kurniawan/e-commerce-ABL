@@ -36,6 +36,14 @@ helm version --short
 
 Pastikan bagian Server Docker tersedia. Di Windows, buka Docker Desktop dan pilih Linux containers. Java 17 dan Maven untuk build image berjalan di dalam container, sehingga versi Java host tidak menentukan build image ini.
 
+Untuk performa Minikube optimal di Windows WSL2, disarankan mengonfigurasi `%UserProfile%\.wslconfig`:
+
+```ini
+[wsl2]
+memory=8GB
+processors=4
+```
+
 Tersedia empat Dockerfile dan Helm chart aplikasi di `deploy/helm/ecommerce/`.
 `compose.local.yaml` menyediakan database untuk aplikasi yang berjalan di host.
 Database cluster tersedia sebagai manifest terpisah di `deploy/kubernetes/`,
@@ -92,17 +100,17 @@ Pastikan setiap build berhasil sebelum melanjutkan. Build menjalankan `package -
 Command sama untuk PowerShell dan Bash:
 
 ```console
-helm lint deploy/helm/ecommerce
-helm template abl deploy/helm/ecommerce --namespace ecommerce --output-dir rendered
+helm lint deploy/helm/ecommerce -f deploy/helm/ecommerce/values-minikube.yaml
+helm template abl deploy/helm/ecommerce --namespace ecommerce -f deploy/helm/ecommerce/values-minikube.yaml --output-dir rendered
 ```
 
-Default menghasilkan empat Deployment dan empat Service ClusterIP. Helm membuat direktori keluaran `rendered/`, yang sudah diabaikan Git. Template bisa diperiksa tanpa menjalankan Kubernetes, aplikasi, atau database. Kelulusan render bukan bukti workload siap atau API GET/POST berfungsi.
+Default menghasilkan empat Deployment dan empat Service ClusterIP beserta ServiceAccount khusus per service dan kebijakan mesh Istio. Helm membuat direktori keluaran `rendered/`, yang sudah diabaikan Git. Template bisa diperiksa tanpa menjalankan Kubernetes, aplikasi, atau database. Kelulusan render bukan bukti workload siap atau API GET/POST berfungsi.
 
 Contoh memeriksa Product saja:
 
 ```console
-helm lint deploy/helm/ecommerce -f deploy/helm/ecommerce/stages/product.yaml
-helm template abl deploy/helm/ecommerce --namespace ecommerce -f deploy/helm/ecommerce/stages/product.yaml
+helm lint deploy/helm/ecommerce -f deploy/helm/ecommerce/values-minikube.yaml -f deploy/helm/ecommerce/stages/product.yaml
+helm template abl deploy/helm/ecommerce --namespace ecommerce -f deploy/helm/ecommerce/values-minikube.yaml -f deploy/helm/ecommerce/stages/product.yaml
 ```
 
 Gunakan file stage yang sama saat validasi dan install. Default chart mengaktifkan
@@ -226,32 +234,33 @@ periksa event Pod dan log aplikasi; status Helm deployed bukan bukti API bisnis.
 
 ## 6. Health probes dan pemeriksaan awal
 
-Chart mengaktifkan health/probes Actuator. Startup/liveness memakai `/actuator/health/liveness`. Readiness memakai `/actuator/health/readiness` dengan indikator `readinessState,db`. Kegagalan database memengaruhi readiness, tanpa memasukkan database pada liveness. Root filesystem container read-only; `/tmp` memakai volume sementara.
+Chart mengaktifkan health/probes Actuator pada management port terisolasi `9090` (`MANAGEMENT_SERVER_PORT=9090`). Startup/liveness memakai `/actuator/health/liveness`. Readiness memakai `/actuator/health/readiness` dengan indikator `readinessState,db`. Kegagalan database memengaruhi readiness, tanpa memasukkan database pada liveness. Root filesystem container read-only; `/tmp` memakai volume sementara. Port bisnis `8080` dan Gateway ingress tidak mengekspos endpoint `/actuator/*`.
 
-Setelah Product ready, jalankan command ini pada salah satu shell:
+Setelah Product ready, jalankan command ini pada salah satu shell untuk probe manual pada management port `9090`:
 
 ```console
-minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce port-forward service/abl-product-service 18081:8080
+minikube -p ecommerce-abl kubectl -- --context=ecommerce-abl -n ecommerce port-forward deployment/abl-product-service 19090:9090
 ```
 
 Dari terminal Windows PowerShell lain:
 
 ```powershell
-curl.exe --fail http://127.0.0.1:18081/actuator/health/readiness
+curl.exe --fail http://127.0.0.1:19090/actuator/health/readiness
+curl.exe --fail http://127.0.0.1:19090/actuator/prometheus
 ```
 
 Atau terminal Linux Bash:
 
 ```bash
-curl --fail http://127.0.0.1:18081/actuator/health/readiness
+curl --fail http://127.0.0.1:19090/actuator/health/readiness
+curl --fail http://127.0.0.1:19090/actuator/prometheus
 ```
 
 Uji GET/POST mengikuti `specs/openapi.yaml` dan contoh di panduan tim. Health
-sukses tidak membuktikan API bisnis selesai. Jika Spring Security ditambahkan,
-atur akses probe untuk kubelet. Setelah uji langsung berhasil, terapkan Gateway
-dan route service dari `deploy/istio/`, lalu ulangi API melalui gateway port 18080
-sesuai bagian 6 panduan tim. Penerapan route terpisah dari Helm; rollback Helm
-tidak membatalkan route, data PostgreSQL, atau migrasi Flyway.
+sukses tidak membuktikan API bisnis selesai. Kebijakan rute Istio dan keamanan mesh
+(`VirtualService`, `DestinationRule`, `PeerAuthentication`, `AuthorizationPolicy`)
+dikelola langsung oleh Helm chart, dengan Gateway bersama diterapkan dari `deploy/istio/gateway.yaml`.
+Akses bisnis eksternal diuji melalui gateway port 18080 (via `bash scripts/deploy-local.sh gateway`).
 
 Menurut output WSL pengguna pada 16 November 2026, Product sudah lolos startup,
 migrasi Flyway, readiness, POST, dan GET daftar/detail melalui akses langsung

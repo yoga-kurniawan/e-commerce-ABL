@@ -87,7 +87,14 @@ helm version --short
 Jika profil `ecommerce-abl` belum ada:
 
 ```bash
-minikube start -p ecommerce-abl --driver=docker --cpus=2 --memory=3000mb
+minikube start -p ecommerce-abl --driver=docker --cpus=4 --memory=5120mb
+```
+
+Untuk performa lancar di Ubuntu WSL2, disarankan mengalokasikan resource pada `%UserProfile%\.wslconfig`:
+```ini
+[wsl2]
+memory=8GB
+processors=4
 ```
 
 Pada snapshot WSL 16 November 2026, alokasi 2 CPU/3000 MB berhasil menjalankan

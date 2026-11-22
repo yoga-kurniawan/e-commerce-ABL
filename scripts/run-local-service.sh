@@ -19,7 +19,7 @@ for suffix in DB_NAME DB_USER DB_PASSWORD DB_PORT SERVICE_PORT; do
   key="${prefix}_${suffix}"
   [[ -n "${!key:-}" ]] || { echo "Missing $key in .env" >&2; exit 1; }
 done
-for name in PRODUCT_SERVICE_PORT CART_SERVICE_PORT ORDER_SERVICE_PORT; do
+for name in PRODUCT_SERVICE_PORT CART_SERVICE_PORT ORDER_SERVICE_PORT PAYMENT_SERVICE_PORT; do
   value="${!name:-}"
   [[ "$value" =~ ^[0-9]+$ ]] && (( 10#$value >= 1 && 10#$value <= 65535 )) || {
     echo "Invalid $name in .env" >&2; exit 1;
@@ -37,7 +37,7 @@ for key in "$port_key" "$db_port_key"; do
   }
 done
 printf -v client_config '{"clients":{"product-url":"http://127.0.0.1:%s","cart-url":"http://127.0.0.1:%s","order-url":"http://127.0.0.1:%s","payment-url":"http://127.0.0.1:%s"}}' \
-  "$PRODUCT_SERVICE_PORT" "$CART_SERVICE_PORT" "$ORDER_SERVICE_PORT" "${PAYMENT_SERVICE_PORT:-8084}"
+  "$PRODUCT_SERVICE_PORT" "$CART_SERVICE_PORT" "$ORDER_SERVICE_PORT" "$PAYMENT_SERVICE_PORT"
 cd "$ROOT"
 exec env \
   SERVER_PORT="${!port_key}" \

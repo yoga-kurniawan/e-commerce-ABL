@@ -55,6 +55,7 @@ spec:
         - name: postgres
           image: postgres:17.11-bookworm
           imagePullPolicy: IfNotPresent
+          args: ["-c", "shared_buffers=32MB", "-c", "max_connections=30", "-c", "work_mem=2MB"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -80,7 +81,7 @@ spec:
                   key: password
           resources:
             requests:
-              cpu: 100m
+              cpu: 50m
               memory: 128Mi
             limits:
               cpu: "1"
