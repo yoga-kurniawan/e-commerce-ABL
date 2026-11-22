@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,6 +20,8 @@ import id.ac.ub.abl.order.configuration.CorrelationHeaderPropagationConfiguratio
 import id.ac.ub.abl.order.configuration.RestClientConfiguration;
 import id.ac.ub.abl.order.domain.ProductSnapshot;
 import id.ac.ub.abl.order.usecase.exception.ProductServiceUnavailableException;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -201,6 +204,56 @@ class ProductRestAdapterTest {
         } finally {
             RequestContextHolder.resetRequestAttributes();
         }
+    }
+
+    @Test
+    void findAllByIds_propagatesParentTraceIdAndCorrelationHeaderAcrossParallelRequests() {
+        Tracer tracer = context.getBean(Tracer.class);
+        Span parentSpan = tracer.nextSpan().name("order-parallel-lookup-parent").start();
+        String expectedTraceId = parentSpan.context().traceId();
+
+        var request = new MockHttpServletRequest("POST", "/api/v1/orders");
+        request.addHeader("x-request-id", "order-parallel-789");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        var arrived = new CountDownLatch(2);
+        Map<String, String> capturedRequestIds = new ConcurrentHashMap<>();
+        Map<String, String> capturedTraceParents = new ConcurrentHashMap<>();
+        REPLY.set(exchange -> {
+            String path = exchange.getRequestURI().getPath();
+            String reqId = exchange.getRequestHeaders().getFirst("x-request-id");
+            String traceparent = exchange.getRequestHeaders().getFirst("traceparent");
+            if (reqId != null) { capturedRequestIds.put(path, reqId); }
+            if (traceparent != null) { capturedTraceParents.put(path, traceparent); }
+            arrived.countDown();
+            assertTrue(arrived.await(5, TimeUnit.SECONDS), "Requests did not execute concurrently");
+            String body = path.endsWith("/1")
+                    ? "{\"id\": 1, \"name\": \"Keyboard\", \"price\": 350000, \"stock\": 20}"
+                    : "{\"id\": 2, \"name\": \"Mouse\", \"price\": 150000, \"stock\": 10}";
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+
+        try (Tracer.SpanInScope ignored = tracer.withSpan(parentSpan)) {
+            Map<Long, Optional<ProductSnapshot>> result = adapter.findAllByIds(List.of(1L, 2L));
+            assertEquals(2, result.size());
+        } finally {
+            parentSpan.end();
+            RequestContextHolder.resetRequestAttributes();
+        }
+
+        assertEquals("order-parallel-789", capturedRequestIds.get("/api/v1/products/1"));
+        assertEquals("order-parallel-789", capturedRequestIds.get("/api/v1/products/2"));
+
+        String tp1 = capturedTraceParents.get("/api/v1/products/1");
+        String tp2 = capturedTraceParents.get("/api/v1/products/2");
+        assertNotNull(tp1, "traceparent missing for product 1");
+        assertNotNull(tp2, "traceparent missing for product 2");
+        assertEquals(expectedTraceId, tp1.split("-")[1]);
+        assertEquals(expectedTraceId, tp2.split("-")[1]);
     }
 
     static void reply(int status, String contentType, String body) {

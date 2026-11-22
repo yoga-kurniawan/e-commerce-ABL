@@ -22,6 +22,7 @@ import org.springframework.transaction.support.SimpleTransactionStatus;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -107,13 +108,37 @@ class PaymentReadOnlyTransactionTest {
         verify(session, times(1)).configureLockTimeout(any());
     }
 
+    @Test
+    @DisplayName("runReadOnly uses default 3-second timeout and supports custom readTimeoutSeconds override")
+    void runReadOnly_configuresDefaultAndCustomTimeout() {
+        transactions.runReadOnly("BUSY", () -> "ok");
+        assertThat(transactionManager.lastTimeout).isEqualTo(3);
+
+        PaymentTransactions customTransactions =
+                new PaymentTransactions(transactionManager, session, 250, 30000, 7);
+        customTransactions.runReadOnly("BUSY", () -> "ok");
+        assertThat(transactionManager.lastTimeout).isEqualTo(7);
+    }
+
+    @Test
+    @DisplayName("constructor rejects non-positive readTimeoutSeconds")
+    void constructor_rejectsNonPositiveReadTimeoutSeconds() {
+        assertThatThrownBy(() -> new PaymentTransactions(transactionManager, session, 250, 30000, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new PaymentTransactions(transactionManager, session, 250, 30000, -1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     /**
      * Stub PlatformTransactionManager that properly binds read-only status
      * to TransactionSynchronizationManager to allow assertions.
      */
     static class StubTransactionManager implements PlatformTransactionManager {
+        int lastTimeout = TransactionDefinition.TIMEOUT_DEFAULT;
+
         @Override
         public TransactionStatus getTransaction(TransactionDefinition definition) throws TransactionException {
+            lastTimeout = definition.getTimeout();
             TransactionSynchronizationManager.initSynchronization();
             TransactionSynchronizationManager.setCurrentTransactionReadOnly(definition.isReadOnly());
             return new SimpleTransactionStatus();

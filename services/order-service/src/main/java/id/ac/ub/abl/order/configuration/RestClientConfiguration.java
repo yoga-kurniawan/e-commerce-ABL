@@ -6,6 +6,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 import id.ac.ub.abl.order.adapter.outbound.rest.CartApiClient;
 import id.ac.ub.abl.order.adapter.outbound.rest.PaymentApiClient;
 import id.ac.ub.abl.order.adapter.outbound.rest.ProductApiClient;
+import io.micrometer.context.ContextSnapshot;
+import io.micrometer.context.ContextSnapshotFactory;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import org.slf4j.MDC;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,14 +39,20 @@ public class RestClientConfiguration {
         return executor;
     }
 
+    private static final ContextSnapshotFactory CONTEXT_SNAPSHOT_FACTORY =
+            ContextSnapshotFactory.builder().build();
+
     private static TaskDecorator contextPropagatingDecorator() {
         return runnable -> {
             RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
             Map<String, String> mdcContext = MDC.getCopyOfContextMap();
+            Context otelContext = Context.current();
+            ContextSnapshot snapshot = CONTEXT_SNAPSHOT_FACTORY.captureAll();
             return () -> {
                 RequestAttributes previousAttributes = RequestContextHolder.getRequestAttributes();
                 Map<String, String> previousMdc = MDC.getCopyOfContextMap();
-                try {
+                try (Scope otelScope = otelContext.makeCurrent();
+                     ContextSnapshot.Scope ignored = snapshot.setThreadLocals()) {
                     if (requestAttributes != null) {
                         RequestContextHolder.setRequestAttributes(requestAttributes);
                     } else {

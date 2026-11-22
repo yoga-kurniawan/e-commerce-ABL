@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.sql.SQLException;
 import java.util.function.Supplier;
 import id.ac.ub.abl.payment.usecase.exception.PaymentOperationException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.dao.DataAccessException;
@@ -20,10 +21,14 @@ public class PaymentTransactions {
     private final PaymentDatabaseSession session;
     private final Duration lockBudget;
     private final Duration lease;
+    @Autowired
     public PaymentTransactions(PlatformTransactionManager manager, PaymentDatabaseSession session,
             @Value("${payment.persistence.lock-timeout-ms:250}") long lockMillis,
-            @Value("${payment.persistence.claim-lease-ms:30000}") long leaseMillis) {
-        if (lockMillis < 1 || leaseMillis < 1) { throw new IllegalArgumentException("Durasi persistence harus positif"); }
+            @Value("${payment.persistence.claim-lease-ms:30000}") long leaseMillis,
+            @Value("${payment.persistence.read-timeout-seconds:3}") int readTimeoutSeconds) {
+        if (lockMillis < 1 || leaseMillis < 1 || readTimeoutSeconds < 1) {
+            throw new IllegalArgumentException("Durasi persistence harus positif");
+        }
         this.session = session;
         this.lockBudget = Duration.ofMillis(lockMillis);
         this.lease = Duration.ofMillis(leaseMillis);
@@ -32,7 +37,12 @@ public class PaymentTransactions {
         this.readOnlyTransactions = new TransactionTemplate(manager);
         this.readOnlyTransactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
         this.readOnlyTransactions.setReadOnly(true);
-        this.readOnlyTransactions.setTimeout((int) Math.max(1, (lockMillis + 999) / 1000));
+        this.readOnlyTransactions.setTimeout(readTimeoutSeconds);
+    }
+
+    public PaymentTransactions(PlatformTransactionManager manager, PaymentDatabaseSession session,
+            long lockMillis, long leaseMillis) {
+        this(manager, session, lockMillis, leaseMillis, 3);
     }
     public Duration lease() { return lease; }
     public <T> T creation(Supplier<T> action) {
