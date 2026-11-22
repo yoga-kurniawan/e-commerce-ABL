@@ -1,4 +1,4 @@
-package ub.ac.ubl.cart.adapter.inbound.rest.dto.v2;
+package id.ac.ub.abl.cart.adapter.inbound.rest.dto.v2;
 
 import java.math.BigDecimal;
 
