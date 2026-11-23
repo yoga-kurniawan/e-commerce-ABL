@@ -4,7 +4,7 @@ Backend e-commerce untuk project mata kuliah **Arsitektur Berbasis Layanan**, ke
 
 Struktur kode dirancang untuk memisahkan model domain, koordinator use case, serta adapter HTTP dan database. Kontrak API menjadi acuan implementasi dan pengujian setiap service.
 
-**Product mendukung API V1 dan V2.** V2 menambahkan description, pencarian nama, paginasi opsional, serta X-Total-Count dengan kompatibilitas V1. Verifikasi Product pada 16 November 2026 lulus 119 tests, termasuk PostgreSQL dan upgrade migrasi. Lihat [panduan Product V2](docs/product-service-v2.md) dan [hasil pengujian Product](docs/product-service-testing.md). Kelulusan test Product tidak menyatakan seluruh service V2 atau deployment cluster terbaru telah diverifikasi.
+**Product mendukung API V1 dan V2.** V2 menambahkan description, pencarian nama, paginasi opsional, serta X-Total-Count dengan kompatibilitas V1. Verifikasi Product pada 16 November 2026 lulus 119 tests, termasuk PostgreSQL dan upgrade migrasi. Lihat [panduan Product V2](docs/archive/product-service-v2.md) dan [hasil pengujian Product](docs/testing/product-service-testing.md). Kelulusan test Product tidak menyatakan seluruh service V2 atau deployment cluster terbaru telah diverifikasi.
 
 ## Daftar isi
 
@@ -29,16 +29,16 @@ Struktur kode dirancang untuk memisahkan model domain, koordinator use case, ser
 
 | Kategori | Teknologi | Status/dasar |
 |---|---|---|
-| Backend | Java 17, Spring Boot 4.1.2 | Baseline project; parent telah divalidasi |
-| API | REST, JSON, URL path versioning `/api/v1` dan `/api/v2` | Product V1/V2 tersedia; lihat panduan dan bukti pengujian per service |
-| Dokumentasi API | OpenAPI 3.0.3, API versi 1.0.0 dan 2.0.0 | Spesifikasi API (DEC-020) |
-| Arsitektur internal | Domain, use case, ports/adapters | Rancangan internal |
-| Database | PostgreSQL 17, database terpisah per service | Pilihan rancangan; runtime belum dikonfirmasi |
-| Persistence | Spring Data JPA/Hibernate dan Flyway | Dependency dan rancangan implementasi |
-| Build | Maven multi-module dan Maven Wrapper | `validate` berhasil |
-| Container | Docker Linux containers | Engine harus aktif pada Windows/Linux yang digunakan |
-| Deployment | Kubernetes/Minikube, Istio, Helm | Template Helm aplikasi tersedia; cluster dan Istio ditunda |
-| Pengujian HTTP/beban | curl, Postman, Siege | Skenario disiapkan; hasil bisnis/beban belum tersedia |
+| Backend | Java 17, Spring Boot 4.1.2 | Keempat service (Product, Cart, Order, Payment) terimplementasi penuh |
+| API | REST, JSON, URL path versioning `/api/v1` dan `/api/v2` | Product, Cart, Order, Payment V1 & V2 tersedia dan terverifikasi |
+| Dokumentasi API | OpenAPI 3.0.3, API versi 1.0.0 dan 2.0.0 | Spesifikasi API (DEC-020) & simulator OpenAPI |
+| Arsitektur internal | Domain, use case, ports/adapters (Hexagonal) | Terimplementasi penuh pada keempat service |
+| Database | PostgreSQL 17, database terpisah per service | Teruji dengan Testcontainers & StatefulSet Minikube |
+| Persistence | Spring Data JPA/Hibernate dan Flyway | Migrasi Flyway V1/V2/V3 & entity JPA tervalidasi |
+| Build | Maven multi-module dan Maven Wrapper | Multi-module build dan test-compile per service |
+| Container | Docker Linux containers (multi-stage build) | 4 Dockerfile teruji dan termuat ke Minikube |
+| Deployment | Kubernetes/Minikube, Istio, Helm | Helm umbrella chart teruji di Minikube WSL2: mTLS STRICT, L7 RBAC, CB |
+| Pengujian HTTP/beban | curl, bash automated suite (`tests/`), k6 | Skenario otomasi cluster & integrasi teruji di Minikube WSL2 |
 
 Autentikasi JWT, role ADMIN/USER, Kafka, DLQ, shipping, dan notification berada di luar cakupan kontrak empat service saat ini. Penambahannya memerlukan desain dan kontrak tersendiri.
 
@@ -82,7 +82,7 @@ Model tabel bisnis berikut masih perlu diwujudkan melalui migrasi dan entity:
 | order_db | orders, order_items untuk rancangan snapshot |
 | payment_db | payments |
 
-Skema internal tersebut masih perlu diwujudkan melalui migrasi dan mapping entity. Detail version, timestamp, constraint, retention, dan payment attempt harus mengikuti [keputusan desain](docs/decisions.md).
+Skema internal tersebut masih perlu diwujudkan melalui migrasi dan mapping entity. Detail version, timestamp, constraint, retention, dan payment attempt harus mengikuti [keputusan desain](docs/architecture/decisions.md).
 
 ## Konsep integrasi
 
@@ -114,20 +114,21 @@ ABL-Project/
 │   ├── cart-service/
 │   ├── order-service/
 │   └── payment-service/
-├── specs/openapi.yaml
-├── specs/openapi-v2.yaml
+├── specs/
+│   ├── openapi.yaml
+│   ├── openapi-v2.yaml
+│   └── payment-simulator.openapi.yaml
 ├── docs/
-│   ├── architecture.md
-│   ├── business-rules.md
-│   ├── development.md
-│   ├── testing.md
-│   └── decisions.md
-├── deploy/              # Helm chart aplikasi; database dan Istio dilengkapi bertahap
-├── scripts/             # Otomatisasi sesuai kebutuhan
-└── tests/               # Pengujian lintas service
+│   ├── architecture/
+│   ├── guides/
+│   ├── testing/
+│   └── archive/
+├── deploy/              # Helm umbrella chart, values, stage overrides, & k8s manifests
+├── scripts/             # Otomatisasi deploy-local.sh & tooling
+└── tests/               # Pengujian skrip, integrasi e2e, security mesh, resilience, & load
 ```
 
-Lihat [architecture.md](docs/architecture.md) untuk struktur internal tiap module. Tree merupakan struktur tujuan; direktori yang ada belum membuktikan implementasi atau konfigurasi sudah lengkap.
+Lihat [architecture.md](docs/architecture/architecture.md) untuk struktur internal tiap module. Tree merupakan struktur tujuan; direktori yang ada belum membuktikan implementasi atau konfigurasi sudah lengkap.
 
 ## Persiapan development
 
@@ -146,7 +147,7 @@ Pastikan Maven memakai Java yang sesuai baseline project. `validate` memeriksa k
 ./mvnw -pl services/product-service -am compile
 ```
 
-Sebelum menjalankan aplikasi, siapkan database, migrasi, dan datasource sesuai [development.md](docs/development.md). `.env` tidak otomatis dibaca oleh Spring Boot. Gunakan environment terminal atau run configuration IDE secara eksplisit.
+Sebelum menjalankan aplikasi, siapkan database, migrasi, dan datasource sesuai [development.md](docs/guides/development.md). `.env` tidak otomatis dibaca oleh Spring Boot. Gunakan environment terminal atau run configuration IDE secara eksplisit.
 
 ## Menjalankan infrastruktur lokal
 
@@ -157,7 +158,7 @@ docker info
 docker ps -a
 ```
 
-Contoh pembuatan PostgreSQL lokal tersedia pada [panduan database development](docs/development.md#4-contoh-menyiapkan-database-product). Rancangan empat container menggunakan port host berikut:
+Contoh pembuatan PostgreSQL lokal tersedia pada [panduan database development](docs/guides/development.md#3-validasi-dan-jalankan-database). Rancangan empat container menggunakan port host berikut:
 
 | Container lokal contoh | Port host → container |
 |---|---|
@@ -241,7 +242,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
 ./mvnw -pl services/payment-service spring-boot:run
 ```
 
-URL client antarlayanan juga perlu dikonfigurasi pada consumer; lihat [konfigurasi client](docs/development.md#6-url-dependency-dan-http-client). Environment di satu terminal tidak otomatis tersedia pada terminal lain.
+URL client antarlayanan juga perlu dikonfigurasi pada consumer; lihat [konfigurasi client](docs/guides/development.md#5-jalankan-service). Environment di satu terminal tidak otomatis tersedia pada terminal lain.
 
 ## Dokumentasi API
 
@@ -250,11 +251,11 @@ URL client antarlayanan juga perlu dikonfigurasi pada consumer; lihat [konfigura
 | 1.0.0 | `/api/v1` | [specs/openapi.yaml](specs/openapi.yaml) | Diimplementasikan; dibekukan dan tetap didukung |
 | 2.0.0 | `/api/v2` | [specs/openapi-v2.yaml](specs/openapi-v2.yaml) | Product sudah diimplementasikan dan diuji; lihat status tiap service |
 
-Buka file tersebut pada Swagger Editor/validator yang dipakai tim untuk memeriksa struktur endpoint dan schema. Ringkasan perubahan 1.0.0 → 2.0.0 ada pada `info.description` kontrak v2 dan [DEC-020–DEC-023](docs/decisions.md#dec-020-api-versi-200-dengan-url-path-versioning).
+Buka file tersebut pada Swagger Editor/validator yang dipakai tim untuk memeriksa struktur endpoint dan schema. Ringkasan perubahan 1.0.0 → 2.0.0 ada pada `info.description` kontrak v2 dan [DEC-020–DEC-023](docs/architecture/decisions.md#dec-020-api-versi-200-dengan-url-path-versioning).
 
 Swagger UI di masing-masing aplikasi belum dikonfirmasi terpasang. URL `/swagger-ui.html` tidak diasumsikan tersedia. Kontrak statis ini sudah dapat dipakai sebagai acuan implementasi dan pengujian.
 
-Beberapa bagian kontrak API masih perlu dilengkapi, terutama content respons tambahan dan atribut respons PATCH. Temuannya ada pada [business-rules.md](docs/business-rules.md#6-keterbatasan-kontrak-sumber). Perubahan kontrak dicatat di [decisions.md](docs/decisions.md).
+Beberapa bagian kontrak API masih perlu dilengkapi, terutama content respons tambahan dan atribut respons PATCH. Temuannya ada pada [business-rules.md](docs/architecture/business-rules.md#6-keterbatasan-kontrak-sumber). Perubahan kontrak dicatat di [decisions.md](docs/architecture/decisions.md).
 
 ## Flow pengujian alur utama
 
@@ -435,7 +436,7 @@ Setelah datasource/profile pengujian siap:
 ./mvnw verify
 ```
 
-Keberhasilan command dengan nol tests tidak membuktikan fitur telah diuji. Integration tests hanya dijalankan otomatis jika lifecycle/plugin-nya dikonfigurasi. Lihat [testing.md](docs/testing.md) untuk matriks 18 operasi v1, tambahan v2, dan pencatatan hasil.
+Keberhasilan command dengan nol tests tidak membuktikan fitur telah diuji. Integration tests hanya dijalankan otomatis jika lifecycle/plugin-nya dikonfigurasi. Lihat [testing.md](docs/testing/testing.md) untuk matriks 18 operasi v1, tambahan v2, dan pencatatan hasil.
 
 Bukti demo yang dapat dikumpulkan setelah implementasi tersedia:
 
@@ -450,27 +451,25 @@ Tidak ada format console log khusus atau Swagger screenshot yang diasumsikan sud
 
 ## Status dan pekerjaan berikutnya
 
-Status pengembangan per **29 Oktober 2026**:
+Status pengembangan dan verifikasi:
 
 | Bagian | Status |
 |---|---|
-| Empat skeleton Initializr dan parent/module Maven | Tersedia; `validate` berhasil |
-| Struktur package domain/usecase/adapter | Mulai disiapkan; kelengkapan kelas bisnis belum diverifikasi |
-| Kontrak OpenAPI | Sudah disalin ke project Ubuntu |
-| Docker daemon | Periksa pada sistem operasi yang sedang digunakan |
-| Database dan endpoint bisnis | Product lulus tests PostgreSQL terisolasi dan HTTP; database development serta tiga service lain belum diverifikasi |
-| Cluster/deployment | Dockerfile dan Helm chart aplikasi tersedia; runtime cluster belum diuji |
-| Tests bisnis dan pengujian beban | Product: 80 tests lulus; lintas service dan beban belum diuji |
-
-Prioritas: putuskan isu terbuka, siapkan database/config development, implementasikan Product → Cart → Order → Payment, lalu uji kontrak dan integrasi. Stock reservation, idempotency, dan verifikasi pembayaran final memerlukan rancangan lanjutan.
+| Empat skeleton Initializr dan parent/module Maven | Tersedia; `validate` & build berhasil |
+| Struktur package domain/usecase/adapter (Hexagonal) | Terimplementasi penuh pada seluruh 4 service |
+| Kontrak OpenAPI v1 & v2 | Diimplementasikan dan divalidasi dengan Swagger/OpenAPI validator |
+| Docker multi-stage build | 4 Dockerfile teruji dan dimuat ke image Minikube |
+| Database dan endpoint bisnis | Keempat service lulus tests PostgreSQL Testcontainers terisolasi & integrasi HTTP |
+| Cluster/deployment Minikube & Istio | Helm umbrella chart teruji di Minikube WSL2: mTLS `STRICT`, L7 RBAC, Outlier Detection CB, Gateway 18080 |
+| Tests bisnis, keamanan, dan pengujian beban | 119 tests Product, Cart V2, 309 tests Payment lulus; skenario cluster otomatis di `tests/` siap |
 
 ## Dokumentasi lanjutan
 
-- [Architecture](docs/architecture.md): pola arsitektur, tanggung jawab layer, dan alur data.
-- [Business rules](docs/business-rules.md): aturan bisnis dan bagian kontrak yang perlu dilengkapi.
-- [Development](docs/development.md): environment, database, migrasi, dan startup lokal.
-- [Testing](docs/testing.md): skenario serta format hasil pengujian.
-- [Decisions](docs/decisions.md): keputusan yang sudah dipilih dan yang masih terbuka.
+- [Architecture](docs/architecture/architecture.md): pola arsitektur, tanggung jawab layer, dan alur data.
+- [Business rules](docs/architecture/business-rules.md): aturan bisnis dan bagian kontrak yang perlu dilengkapi.
+- [Development](docs/guides/development.md): environment, database, migrasi, dan startup lokal.
+- [Testing](docs/testing/testing.md): skenario serta format hasil pengujian.
+- [Decisions](docs/architecture/decisions.md): keputusan yang sudah dipilih dan yang masih terbuka.
 
 Contoh ID dan nominal pada panduan ini adalah ilustrasi. Sesuaikan dengan fixture dan gunakan identifier yang dikembalikan aplikasi saat menjalankan pengujian.
 
@@ -484,4 +483,4 @@ helm lint deploy/helm/ecommerce
 helm template abl deploy/helm/ecommerce --namespace ecommerce --output-dir rendered
 ```
 
-Lihat [panduan deployment Windows dan Linux](docs/deployment.md) untuk prasyarat, build semua image, konfigurasi database/Secret, dan langkah cluster nanti. Template belum membuktikan workload atau API bisnis berjalan.
+Lihat [panduan deployment Windows dan Linux](docs/guides/deployment.md) untuk prasyarat, build semua image, konfigurasi database/Secret, dan langkah cluster nanti. Template belum membuktikan workload atau API bisnis berjalan.

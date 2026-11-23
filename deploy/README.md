@@ -283,7 +283,7 @@ bash scripts/deploy-local.sh check
 - `/api/v2/payments?orderId=1` (jika `payment-service` aktif).
 
 Port-forward sementara dihentikan saat script berakhir. Ini smoke test HTTP ingress gateway; belum menguji POST/PUT/PATCH/DELETE atau alur transaksi multi-service. Gunakan
-[panduan tim](../docs/panduan-deployment-tim.md) untuk pengujian bisnis lengkap.
+[panduan tim](../docs/guides/panduan-deployment-tim.md) untuk pengujian bisnis lengkap.
 
 ### Port Management Actuator Terisolasi (Port 9090)
 

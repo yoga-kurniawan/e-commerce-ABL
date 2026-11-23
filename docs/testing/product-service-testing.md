@@ -96,7 +96,7 @@ Pemeriksaan helper deployment: **14 orchestration checks passed** memakai
 command doubles, bukan cluster nyata. Helm lint lulus. Route Product mencakup
 V1 serta V2. Pengujian ini tidak memperbarui image pada cluster yang pernah
 dideploy; build dan rollout V2 harus dijalankan sebelum pengujian gateway V2.
-Lihat [panduan Product V2](product-service-v2.md).
+Lihat [panduan Product V2](../archive/product-service-v2.md).
 
 ## Verifikasi gateway Product V2 pada cluster lokal
 
@@ -107,4 +107,4 @@ Sebanyak 31 request gateway nyata lulus assertion status, body, dan header
 `server: istio-envoy`. Data aktif lama ID 1–3 tidak berubah; product uji ID 4–6
 di-soft-delete setelah pengujian, dengan baris historis dipertahankan.
 Rincian batas pengujian dan pemeriksaan cluster ada pada bagian hasil deployment
-di [panduan Product V2](product-service-v2.md#hasil-deployment-pada-16-november-2026).
+di [panduan Product V2](../archive/product-service-v2.md#hasil-deployment-pada-16-november-2026).

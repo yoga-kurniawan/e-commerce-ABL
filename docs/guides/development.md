@@ -1,6 +1,6 @@
 # Development lokal
 
-[Kembali ke README](../README.md) · [Arsitektur](architecture.md) · [Pengujian](testing.md)
+[Kembali ke README](../../README.md) · [Arsitektur](../architecture/architecture.md) · [Pengujian](../testing/testing.md)
 
 ## 1. Lingkup
 
@@ -125,7 +125,7 @@ Lokasi migrasi: `services/<service>-service/src/main/resources/db/migration/`.
 - Source service, migrasi, dan test belum otomatis dilengkapi oleh setup database ini.
 - Context test Product sudah menyediakan datasource PostgreSQL terisolasi melalui Testcontainers, termasuk test server HTTP pada port acak. Test service lain masih memerlukan konfigurasi datasource pengujian. Jangan menjalankan tests terhadap database development berisi data penting tanpa mengatur isolasi fixture/profile.
 
-Pengembangan domain/unit test tidak membutuhkan cluster. Lihat [testing.md](testing.md) untuk rencana tests dan [decisions.md](decisions.md) untuk aturan bisnis yang belum ditentukan.
+Pengembangan domain/unit test tidak membutuhkan cluster. Lihat [testing.md](../testing/testing.md) untuk rencana tests dan [decisions.md](../architecture/decisions.md) untuk aturan bisnis yang belum ditentukan.
 
 ## 8. Menghentikan database
 

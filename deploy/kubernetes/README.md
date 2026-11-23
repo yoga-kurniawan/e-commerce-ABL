@@ -21,7 +21,7 @@ dan Secret service terkait berisi key `username` serta `password`.
 Kredensial tidak ditulis ke manifest. PostgreSQL memakai image resmi
 [`postgres:17.11-bookworm`](https://github.com/docker-library/docs/blob/master/postgres/README.md).
 
-Ikuti [panduan tim](../../docs/panduan-deployment-tim.md) untuk membuat Secret
+Ikuti [panduan tim](../../docs/guides/panduan-deployment-tim.md) untuk membuat Secret
 sebelum database, lalu memasang aplikasi. Panduan tersebut juga mencatat bukti
 runtime. Berdasarkan output WSL pengguna pada 16 November 2026, database Product
 1/1 Running dan PVC Bound; startup, migrasi, serta POST/GET aplikasi Product

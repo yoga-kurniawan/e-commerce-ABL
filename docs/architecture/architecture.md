@@ -2,7 +2,7 @@
 
 Product memakai status internal `active` untuk soft delete (DEC-011). Port lookup/list hanya mengembalikan produk aktif; mapper mempertahankan status aktif/nonaktif. Use case delete menonaktifkan produk, dan adapter menyimpan perubahan tanpa menghapus baris. Status ini tidak menjadi atribut HTTP publik.
 
-[Kembali ke README](../README.md)
+[Kembali ke README](../../README.md)
 
 ## Daftar isi
 
@@ -23,7 +23,7 @@ Product memakai status internal `active` untuk soft delete (DEC-011). Port looku
 
 Project ABL membagi backend e-commerce menjadi **Product, Cart, Order, dan Payment**. Setiap layanan memiliki tanggung jawab dan kontrak REST/JSON yang jelas. Struktur kode memisahkan **domain, use case, ports, dan adapters**, dengan peran boundary, control, dan entity yang terdefinisi.
 
-Tujuan rancangan adalah memperjelas lokasi aturan bisnis, memisahkan kontrak HTTP dari persistence, dan memungkinkan pengujian komponen melalui interface. Struktur direktori dan diagram di sini merupakan **rancangan yang dituju**. Status terakhir yang terkonfirmasi baru skeleton/module Maven, struktur package yang mulai disiapkan, dan kontrak API. Belum ada bukti implementasi penuh, tests bisnis, atau deployment selesai.
+Tujuan rancangan adalah memperjelas lokasi aturan bisnis, memisahkan kontrak HTTP dari persistence, dan memungkinkan pengujian komponen melalui interface. Keempat service (**Product, Cart, Order, dan Payment**) untuk API V1 maupun V2, pengujian database PostgreSQL Testcontainers, Dockerfile multi-stage build, deployment Helm umbrella chart, serta pengujian Istio Service Mesh (mTLS `STRICT`, L7 RBAC via `AuthorizationPolicy`, dan Circuit Breaker `DestinationRule`) telah selesai diimplementasikan dan diverifikasi di Minikube WSL2.
 
 ## Pola arsitektur
 
@@ -109,7 +109,7 @@ flowchart TB
 
 Setiap layanan mengakses kebutuhan data eksternalnya melalui lookup API. Harga checkout mengikuti harga tersimpan pada Cart (OPEN-003 B). Order dapat membaca Product untuk data produk/validasi, tetapi tidak mengganti harga Cart dengan harga katalog terbaru. Cara membawa harga satuan tersimpan ke Order masih perlu diputuskan karena respons Cart awal belum memuatnya.
 
-Pintu masuk API pada diagram adalah komponen logis. Target deployment memakai Istio ingress, tetapi ingress/cluster belum dijalankan. Saat development langsung pada host, client dapat mengakses service melalui port lokal masing-masing.
+Pintu masuk API dikelola melalui Istio Ingress Gateway pada port 18080 dengan routing VirtualService dinamis untuk prefix `/api/v1` dan `/api/v2`. Saat development langsung pada host, client juga dapat mengakses service melalui port lokal masing-masing.
 
 ### Kepemilikan data
 
@@ -136,12 +136,18 @@ ABL-Project/
 │   ├── cart-service/
 │   ├── order-service/
 │   └── payment-service/
-├── specs/openapi.yaml               # Kontrak publik v1 (1.0.0)
-├── specs/openapi-v2.yaml            # Kontrak publik v2 (2.0.0, DEC-020)
-├── docs/                           # Dokumentasi desain/development/tests
-├── deploy/                         # Manifests/chart, ditulis saat deployment
-├── scripts/                        # Otomatisasi sesuai kebutuhan
-└── tests/                          # Pengujian lintas service
+├── specs/
+│   ├── openapi.yaml                # Kontrak publik v1 (1.0.0)
+│   ├── openapi-v2.yaml             # Kontrak publik v2 (2.0.0, DEC-020)
+│   └── payment-simulator.openapi.yaml
+├── docs/                           # Dokumentasi terstruktur
+│   ├── architecture/               # Arsitektur, aturan bisnis, keputusan, & desain teknis
+│   ├── guides/                     # Panduan development & deployment tim
+│   ├── testing/                    # Strategi & hasil pengujian per service
+│   └── archive/                    # Rencana implementasi & catatan transisi historis
+├── deploy/                         # Manifests Kubernetes & Helm umbrella chart
+├── scripts/                        # Otomatisasi deploy-local.sh & utilitas
+└── tests/                          # Pengujian lintas service & otomasi cluster
 ```
 
 ### Satu service, dicontohkan Product
@@ -370,7 +376,7 @@ Tahap 6 Payment menyediakan OrderRestAdapter di belakang OrderLookup, client dek
 
 Tahap 4 Payment menambahkan PaymentsRepository, PaymentOrderGuardsRepository, PaymentIdempotencyRepository, serta helper PaymentDatabaseSession di outbound database adapter. Lock dan native mutation memerlukan transaksi caller; helper menyetel PostgreSQL lock_timeout transaction-local sebelum operasi. Query/locking telah diuji dengan PostgreSQL terisolasi; implementasi transaksi output port tersedia pada tahap 5 melalui PaymentPersistenceAdapter, PaymentIdempotencyAdapter dan PaymentCreationPersistenceAdapter dengan helper PaymentTransactions.
 
-Desain teknis Payment tersedia di [payment-service-technical-design.md](payment-service-technical-design.md): durable idempotency claim dengan lease/fencing, lookup Order di luar transaksi, finalisasi atomik Payment+snapshot replay, guard per Order, dan partial index untuk PENDING/SUCCESS. Tahap 3 menyediakan migrasi lokal `payments`, `payment_order_guards`, `payment_idempotency` serta JPA entities terpisah dari domain. Tahap 5 mengimplementasikan mapper, adapter transaksi/locking, claim/fencing dan snapshot atomik; hasil tests schema/mapping dicatat pada [payment-service-testing.md](payment-service-testing.md). Kontrak simulator lokal dipisahkan dari kontrak API bisnis publik.
+Desain teknis Payment tersedia di [payment-service-technical-design.md](payment-service-technical-design.md): durable idempotency claim dengan lease/fencing, lookup Order di luar transaksi, finalisasi atomik Payment+snapshot replay, guard per Order, dan partial index untuk PENDING/SUCCESS. Tahap 3 menyediakan migrasi lokal `payments`, `payment_order_guards`, `payment_idempotency` serta JPA entities terpisah dari domain. Tahap 5 mengimplementasikan mapper, adapter transaksi/locking, claim/fencing dan snapshot atomik; hasil tests schema/mapping dicatat pada [payment-service-testing.md](../testing/payment-service-testing.md). Kontrak simulator lokal dipisahkan dari kontrak API bisnis publik.
 
 - `@Transactional` mengatur transaksi database lokal, bukan transaksi global Product–Cart–Order–Payment.
 - Lookup HTTP dengan timeout sebaiknya tidak menahan lock/transaction SQL lebih lama dari yang diperlukan.
@@ -393,13 +399,13 @@ Batas transaksi dapat ditempatkan pada handler/local writer yang sesuai. Pemangg
 | Order | 8083 | localhost:5435/order_db |
 | Payment | 8084 | localhost:5436/payment_db |
 
-Konfigurasi datasource/environment per terminal dijelaskan pada [development.md](development.md). URL/port pada tabel adalah pengaturan development lokal. `.env` tidak otomatis dimuat oleh Spring Boot.
+Konfigurasi datasource/environment per terminal dijelaskan pada [development.md](../guides/development.md). URL/port pada tabel adalah pengaturan development lokal. `.env` tidak otomatis dimuat oleh Spring Boot.
 
-### Target deployment berikutnya
+### Target deployment dan implementasi cluster
 
-Rancangan memakai Docker image per service, Kubernetes Service/DNS, Istio ingress/mesh, serta Helm untuk aplikasi. Semua aplikasi dapat memakai container port 8080 pada Pod berbeda. Template awal aplikasi tersedia di `deploy/helm/ecommerce/`: satu replica per service, container port 8080, ClusterIP, resource budget awal, referensi Secret, dan health probes. Namespace ditentukan melalui Helm; image, database host, kredensial, serta resource budget perlu disesuaikan per lingkungan. Policy mesh disiapkan pada tahap Istio.
+Rancangan memakai Docker multi-stage build per service, Kubernetes Service/DNS, Istio Service Mesh, serta Helm umbrella chart untuk aplikasi (`deploy/helm/ecommerce/`). Semua aplikasi memakai container port 8080 pada Pod berbeda, dengan Actuator management port 9090 terisolasi. Seluruh konfigurasi aplikasi dan StatefulSet database PostgreSQL dideploy secara deklaratif. Kebijakan Istio Service Mesh mencakup namespace-wide strict mTLS (`PeerAuthentication STRICT`), L7 RBAC SPIFFE principal authorization, HTTP route & safe retries (`VirtualService`), dan outlier detection circuit breaker (`DestinationRule`).
 
-Deployment cluster merupakan tahap pengembangan berikutnya. Folder `deploy/` dan `scripts/` menampung konfigurasi serta otomatisasinya. Dockerfile tersedia pada tiap service; cara build dan penggunaan chart dijelaskan di [deployment.md](deployment.md). Kesiapan database, mTLS, telemetry backend, dan workload cluster belum diverifikasi. Mesh transport tetap memerlukan otorisasi pengguna dan aturan bisnis pada aplikasi.
+Deployment cluster otomatis dijalankan melalui `bash scripts/deploy-local.sh`. Dockerfile tersedia pada tiap service; cara build dan penggunaan chart dijelaskan di [deployment.md](../guides/deployment.md). Pengujian pada Minikube WSL2 memverifikasi bahwa seluruh pod 2/2 Running (dengan sidecar proxy istio-envoy), database 1/1 Running, mTLS STRICT terisolasi, dan gateway port 18080 meneruskan trafik API dengan benar.
 
 ## Pengujian dan manfaat rancangan
 
@@ -407,17 +413,17 @@ Deployment cluster merupakan tahap pengembangan berikutnya. Folder `deploy/` dan
 |---|---|
 | Domain mudah diuji | Unit test invariant tanpa HTTP/database |
 | Skenario dapat ditelusuri | Nomori pesan sequence dan hubungkan ke method/alternatif use case |
-| Persistence sesuai desain | Tests PostgreSQL, mapping/constraint/version, dan migrasi |
+| Persistence sesuai desain | Tests PostgreSQL Testcontainers, mapping/constraint/version, dan migrasi |
 | Kontrak stabil | Controller/contract tests dibandingkan dengan OpenAPI |
 | Dependency gagal terkendali | Stub/timeout/5xx tests pada REST adapter dan use case |
 | Independensi layanan | Build, pengujian, serta deployment per service dengan kontrak kompatibel |
 | Kolaborasi tim | Batas data, port/interface, dan keputusan terdokumentasi |
 
-Tujuan tersebut perlu dibuktikan oleh tests dan praktik pengembangan, bukan disimpulkan hanya dari banyaknya folder. Rencana 18 operasi, skenario lintas layanan, dan format bukti ada di [testing.md](testing.md).
+Tujuan tersebut dibuktikan oleh unit tests, slice tests, integrasi Testcontainers per service, serta otomasi cluster Minikube. Rencana operasi, skenario lintas layanan, dan format bukti ada di [testing.md](../testing/testing.md).
 
 ## Batas implementasi
 
-Kontrak publik v1 terdiri dari 18 operasi pada 10 path dan tersedia pada [OpenAPI v1](../specs/openapi.yaml). Kontrak v2 yang backward-compatible memuat 22 operasi pada 11 path pada [OpenAPI v2](../specs/openapi-v2.yaml) dengan prefix `/api/v2` (DEC-020); v2 belum diimplementasikan. Implementasi v2 membutuhkan controller per versi, sedangkan domain/use case dipakai bersama dan mapper output menjaga respons v1 tetap tanpa field baru. Baseline sumber memuat 17 operasi pada 9 path; OPEN-001 B menambahkan POST `/carts` untuk membuat Cart kosong dengan ID backend. Detail request awal memakai customerId sebagai referensi, tanpa menganggap autentikasi/otorisasi sudah tersedia.
+Kontrak publik v1 terdiri dari 18 operasi pada 10 path dan tersedia pada [OpenAPI v1](../../specs/openapi.yaml). Kontrak v2 yang backward-compatible memuat 22 operasi pada 11 path pada [OpenAPI v2](../../specs/openapi-v2.yaml) dengan prefix `/api/v2` (DEC-020). Keempat service telah mendukung V1 dan V2, di mana controller per versi memanggil domain/use case bersama dan mapper output menjaga respons v1 tetap backward-compatible tanpa field baru. Baseline sumber memuat 17 operasi pada 9 path; OPEN-001 B menambahkan POST `/carts` untuk membuat Cart kosong dengan ID backend. Detail request awal memakai customerId sebagai referensi, tanpa menganggap autentikasi/otorisasi JWT sudah tersedia.
 
 Pembuatan Cart melalui endpoint khusus, penambahan quantity duplikat, dan harga saat masuk Cart telah dipilih. Bagian yang masih perlu ditetapkan meliputi kepemilikan/lifecycle Cart, transisi state, masa berlaku harga, harga saat penambahan ulang, policy snapshot, idempotency, dan integrasi provider pembayaran. Beberapa schema respons tambahan juga masih perlu dilengkapi; rinciannya ada pada [business-rules.md](business-rules.md).
 

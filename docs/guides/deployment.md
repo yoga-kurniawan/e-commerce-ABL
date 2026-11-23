@@ -1,7 +1,7 @@
 # Build image dan deployment aplikasi
 
 Untuk otomasi build, database, aplikasi, dan route dalam satu perintah per tahap,
-lihat [panduan script deployment lokal](../deploy/README.md).
+lihat [panduan script deployment lokal](../../deploy/README.md).
 
 Dokumen ini menjelaskan build dan parameter Helm. Untuk alur operasional lengkap
 di Bash/Ubuntu WSL, gunakan [panduan deployment tim](panduan-deployment-tim.md).
@@ -205,7 +205,7 @@ Target: database `1/1 Running`, PVC Bound, dan Service port 5432. Ulangi sesuai
 service pada tahapnya. Database dan aplikasi berada di namespace yang sama;
 database menonaktifkan injeksi sidecar pada template Pod. Siapkan Istio dan label
 namespace sebelum memasang aplikasi, mengikuti panduan tim. Lihat
-[README database](../deploy/kubernetes/README.md) untuk detail persistensi dan
+[README database](../../deploy/kubernetes/README.md) untuk detail persistensi dan
 batasan NetworkPolicy. Perubahan Secret tidak otomatis mengganti password role
 PostgreSQL pada PVC yang telah diinisialisasi.
 

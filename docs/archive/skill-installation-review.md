@@ -21,13 +21,13 @@ Total: 8 skill, 59 file di dalam folder skill. `SKILL.md`, contoh, template, ref
 
 ## Versi sumber dan lisensi
 
-Installer menerima commit tertentu, bukan nama branch yang dapat berubah selama pengunduhan. Catatan sumber per skill ada di [skill-sources.json](../.agents/skill-sources.json).
+Installer menerima commit tertentu, bukan nama branch yang dapat berubah selama pengunduhan. Catatan sumber per skill ada di [skill-sources.json](../../.agents/skill-sources.json).
 
 | Repository | Commit sumber | Lisensi yang disimpan |
 |---|---|---|
-| rrezartprebreza/spring-boot-skills | `c2c23fe4a8aac4278a1b0e6d15955b3dffee1f7c` | [MIT](../.agents/licenses/rrezartprebreza/spring-boot-skills/LICENSE) |
-| obra/superpowers | `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b` | [MIT](../.agents/licenses/obra/superpowers/LICENSE) |
-| Jeffallan/claude-skills | `143243cb2da0e52b02a766fa69c1ff77a71cc73c` | [MIT](../.agents/licenses/Jeffallan/claude-skills/LICENSE) |
+| rrezartprebreza/spring-boot-skills | `c2c23fe4a8aac4278a1b0e6d15955b3dffee1f7c` | [MIT](../../.agents/licenses/rrezartprebreza/spring-boot-skills/LICENSE) |
+| obra/superpowers | `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b` | [MIT](../../.agents/licenses/obra/superpowers/LICENSE) |
+| Jeffallan/claude-skills | `143243cb2da0e52b02a766fa69c1ff77a71cc73c` | [MIT](../../.agents/licenses/Jeffallan/claude-skills/LICENSE) |
 
 Lisensi diambil dari commit yang sama dengan skill. Pertahankan direktori `.agents/licenses/` bersama skill ketika membagikan repository.
 
@@ -38,7 +38,7 @@ Lisensi diambil dari commit yang sama dengan skill. Pertahankan direktori `.agen
 - Domain entity berupa model bisnis tanpa JPA; persistence adapter memetakan ke JPA entity tersendiri.
 - Identifier integer dan request/response mengikuti OpenAPI 3.0.3 proyek; error memakai `code` dan `message`.
 - Product, Cart, Order, dan Payment masing-masing memiliki database sendiri. Foreign key dan JOIN hanya dalam database lokal layanan.
-- Keputusan bisnis mengikuti `docs/decisions.md`. Pilihan utama yang telah diterima: create Cart lewat endpoint khusus, quantity duplikat ditambah, dan checkout memakai harga tersimpan saat produk masuk Cart.
+- Keputusan bisnis mengikuti `docs/architecture/decisions.md`. Pilihan utama yang telah diterima: create Cart lewat endpoint khusus, quantity duplikat ditambah, dan checkout memakai harga tersimpan saat produk masuk Cart.
 - Pertanyaan yang belum diputuskan tetap terbuka. Contoh skill tidak menetapkan status baru, stock reservation, autentikasi, idempotency, presisi uang, atau lifecycle Cart untuk proyek ini.
 
 ## Temuan kesesuaian dan konflik
@@ -82,8 +82,8 @@ Skill tersedia pada giliran berikutnya. Jika belum muncul pada pemilih skill, mu
 Gunakan $hexagonal-architecture, $spring-data-jpa,
 $flyway-migrations, dan $testing-pyramid.
 
-Baca docs/skill-installation-review.md, docs/architecture.md,
-docs/decisions.md, dan specs/openapi.yaml terlebih dahulu.
+Baca docs/archive/skill-installation-review.md, docs/architecture/architecture.md,
+docs/architecture/decisions.md, dan specs/openapi.yaml terlebih dahulu.
 
 Implementasikan GET dan POST Product Service mengikuti konvensi
 proyek dan penyesuaian yang dicatat dalam laporan peninjauan.

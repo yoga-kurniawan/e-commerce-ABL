@@ -1,12 +1,15 @@
 # Rencana pengujian
 
-[Kembali ke README](../README.md) · [Aturan bisnis](business-rules.md) · [Development](development.md)
+[Kembali ke README](../../README.md) · [Aturan bisnis](../architecture/business-rules.md) · [Development](../guides/development.md)
 
 ## 1. Status dan tujuan
 
-Dokumen ini berisi rencana pengujian bersama. Hasil aktual Product tersedia pada [hasil pengujian Product](product-service-testing.md): 80 tests lulus melalui `verify` per module, termasuk enam operasi HTTP dan PostgreSQL terisolasi. Eksekusi gabungan 17 operasi lintas service dan load test belum selesai.
+Dokumen ini berisi kerangka dan rencana pengujian bersama. Keempat service (**Product, Cart, Order, dan Payment**) untuk API V1 maupun V2, pengujian database PostgreSQL berbasis Testcontainers, build Docker container, deployment Helm umbrella chart, serta pengujian Istio Service Mesh (mTLS `STRICT`, L7 RBAC via `AuthorizationPolicy`, dan Circuit Breaker `DestinationRule`) telah selesai diimplementasikan dan diverifikasi di Minikube WSL2.
 
-Laporan h. 25 dan 45 menjelaskan pemeriksaan kontrak menggunakan Swagger Editor. Contoh request/response dinyatakan sebagai ilustrasi pada h. 16. Validasi kontrak tidak membuktikan aplikasi mematuhi kontrak atau pembayaran selesai.
+Hasil pengujian detail per service tersedia pada:
+- Product Service: [hasil pengujian Product](product-service-testing.md) (119 tests lulus, integrasi PostgreSQL terisolasi & upgrade migrasi V1/V2).
+- Cart Service: [hasil pengujian Cart V2](cart-service-v2-testing.md) (verifikasi endpoint V1/V2 dan kalkulasi snapshot item).
+- Payment Service: [hasil pengujian Payment](payment-service-testing.md) (309 tests lulus, verifikasi idempotency, timeout, dan exception handler).
 
 Materi APS menekankan tests terhadap invariant entity dan skenario utama/alternatif, serta keterlacakan desain ke kode. Terapkan hal itu pada domain, use case, dan adapter project ini.
 
@@ -16,27 +19,27 @@ Materi APS menekankan tests terhadap invariant entity dan skenario utama/alterna
 |---|---|---|
 | Domain unit test | `services/<service>/src/test/java/.../domain/` | Invariant dan efek method bisnis tanpa HTTP/database |
 | Use case unit test | `.../usecase/` | Alur utama/alternatif menggunakan mock output port |
-| Database integration test | `.../adapter/` | Mapping JPA, constraint, query, transaksi lokal dan version |
+| Database integration test | `.../adapter/` | Mapping JPA, constraint, query, transaksi lokal, dan migrasi Flyway dengan PostgreSQL Testcontainers |
 | REST adapter test | `.../adapter/` | Mapping respons remote, timeout, 404 dan 5xx menggunakan stub |
 | Controller/API test | `.../adapter/` | Route, validation, status/header/body HTTP |
-| Lintas layanan | `tests/integration/` | Komunikasi nyata dan workflow sesuai cakupan |
-| Pengujian manual HTTP | `tests/postman/` | Collection dan environment tanpa secret nyata |
-| Load test | `tests/load/` | Beban, latency, failure rate dan resource sesuai skenario |
+| Lintas layanan & alur E2E | `tests/integration/`, `tests/scripts/` | Komunikasi nyata antar-service dan skenario deployment gateway |
+| Keamanan & ketahanan mesh | `tests/security/`, `tests/resilience/` | Validasi mTLS STRICT, L7 RBAC SPIFFE principal, zero-downtime rollout, dan failover downstream |
+| Load test | `tests/load/` | Beban, latency, failure rate, dan resource k6 sesuai skenario |
 
-Tests lokal berada pada module masing-masing. Folder `tests/` root tidak otomatis dijalankan oleh Maven; hubungkan melalui script/plugin/CI setelah mekanismenya dipilih.
+Tests lokal berada pada module masing-masing. Suite otomasi di `tests/` dijalankan secara terpusat untuk memverifikasi cluster Minikube dan ingress Istio Gateway.
 
-Untuk repository integration test, PostgreSQL/Testcontainers merupakan rancangan yang sesuai target database. H2 test bila dipilih hanya membuktikan perilaku dalam lingkungan H2; jangan menyamakannya dengan kompatibilitas SQL PostgreSQL.
+Untuk repository integration test, seluruh service menggunakan PostgreSQL Testcontainers terisolasi sesuai target database produksi.
 
 ## 3. Pemeriksaan kontrak
 
 Sebelum menguji server:
 
-1. Buka [OpenAPI](../specs/openapi.yaml) di validator/Swagger Editor yang digunakan tim.
+1. Buka [OpenAPI](../../specs/openapi.yaml) di validator/Swagger Editor yang digunakan tim.
 2. Pastikan 10 path memuat total 18 operasi dengan operationId unik dan semua local reference terdefinisi. Baseline laporan 17 operasi diperluas dengan POST `/carts` melalui OPEN-001 B.
 3. Pastikan path parameter sesuai nama pada URL dan required.
 4. Bandingkan request/response dengan contoh dan schema laporan.
 5. Catat ketidaklengkapan sumber sebagai issue; jangan mengubah kontrak tanpa keputusan.
-6. Untuk [OpenAPI v2](../specs/openapi-v2.yaml), pastikan 11 path memuat 22 operasi dan seluruh operasi v1 tetap ada dengan request/status code yang sama (DEC-020).
+6. Untuk [OpenAPI v2](../../specs/openapi-v2.yaml), pastikan 11 path memuat 22 operasi dan seluruh operasi v1 tetap ada dengan request/status code yang sama (DEC-020).
 
 Schema asli tidak menetapkan seluruh whitelist, panjang string, null semantics, dan respons tambahan. Rencana tests untuk aturan baru harus menyebut keputusan yang menjadi dasarnya.
 
@@ -115,7 +118,7 @@ Seluruh baris di atas juga diuji pada prefix `/api/v2`. Baris berikut adalah tar
 
 ### Payment
 
-- Tahap 0: [desain teknis](payment-service-technical-design.md) menetapkan key ASCII 1–128 case-sensitive, canonicalization berbasis nilai, klaim lease/fencing, lock budget, dan recovery. Tests implementasi wajib menguji takeover stale claim, pemilik lama ditolak, partial index/guard dengan key berbeda, commit ambigu, dan cleanup tanpa menghapus PROCESSING.
+- Tahap 0: [desain teknis](../architecture/payment-service-technical-design.md) menetapkan key ASCII 1–128 case-sensitive, canonicalization berbasis nilai, klaim lease/fencing, lock budget, dan recovery. Tests implementasi wajib menguji takeover stale claim, pemilik lama ditolak, partial index/guard dengan key berbeda, commit ambigu, dan cleanup tanpa menghapus PROCESSING.
 - Simulator mengikuti specs/payment-simulator.openapi.yaml: profil local/test + flag wajib, profil prod menonaktifkan, startup memeriksa loopback/token, token hilang/salah 401, disabled 404, dan hasil final bertentangan 409. Seluruhnya masih rencana tests.
 - Order tidak ditemukan menghasilkan 404; method di luar enum input ditolak.
 - Pada rancangan amount-from-Order, uji bahwa total yang dipakai berasal dari backend Order.

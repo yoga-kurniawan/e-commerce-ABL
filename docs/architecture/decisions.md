@@ -1,6 +1,6 @@
 # Keputusan desain dan pekerjaan terbuka
 
-[Kembali ke README](../README.md) · [Aturan bisnis](business-rules.md)
+[Kembali ke README](../../README.md) · [Aturan bisnis](business-rules.md)
 
 ## 1. Konvensi pencatatan
 

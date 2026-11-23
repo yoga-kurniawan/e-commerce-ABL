@@ -1,7 +1,7 @@
 # Panduan deployment Minikube dan Istio untuk tim
 
 Untuk menjalankan urutan ini secara otomatis, lihat
-[panduan script deployment lokal](../deploy/README.md). Script menggunakan
+[panduan script deployment lokal](../../deploy/README.md). Script menggunakan
 manifest dan stage Helm yang sama; command manual di bawah tetap berguna untuk
 pembelajaran, pengujian bisnis, dan troubleshooting.
 
@@ -14,7 +14,7 @@ profile/tools Windows dapat berbeda dari profile/tools WSL.
 
 Panduan ini menjadi acuan command operasional. Lihat
 [panduan build/chart](deployment.md) untuk parameter Helm dan
-[README database](../deploy/kubernetes/README.md) untuk detail PostgreSQL/PVC.
+[README database](../../deploy/kubernetes/README.md) untuk detail PostgreSQL/PVC.
 Snapshot 16 November 2026 berdasarkan output terminal WSL yang dibagikan pengguna
 menunjukkan Product Ready dengan sidecar, database/PVC siap, serta dua migrasi
 Flyway berhasil hingga versi v2. HTTP readiness mengembalikan 200/UP; POST dan
@@ -376,7 +376,7 @@ yang sama, tanpa menghapus versi pada path. GET riwayat tersedia melalui
 `http://127.0.0.1:18080/api/v2/payments?orderId=1`; sesuaikan ID Order.
 POST, GET detail, dan PATCH Payment tersedia pada kedua versi, dengan format
 payload yang sama dan scope idempotency bersama. Image Payment yang berjalan
-harus sudah memuat adapter v2. Lihat [panduan Payment gateway](../deploy/README.md#payment-v1-dan-v2-melalui-gateway-yang-sama)
+harus sudah memuat adapter v2. Lihat [panduan Payment gateway](../../deploy/README.md#4-akses-gateway-dan-pemeriksaan-http)
 untuk deployment, validasi, dan pengujian route. Host wildcard dan HTTP
 dipakai untuk lab lokal ini; konfigurasi domain/TLS lingkungan lain perlu
 disesuaikan. Pola mengikuti [panduan ingress Istio](https://istio.io/latest/docs/tasks/traffic-management/ingress/ingress-control/).
