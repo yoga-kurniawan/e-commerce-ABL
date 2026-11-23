@@ -53,7 +53,7 @@ Docker harus aktif. Dari root repo:
 
 ```bash
 ./mvnw -pl services/product-service -am verify
-bash tests/integration/deploy-local-test.sh
+bash tests/scripts/deploy-local-test.sh
 helm lint deploy/helm/ecommerce -f deploy/helm/ecommerce/stages/product.yaml
 ```
 

@@ -75,7 +75,7 @@ Branch `feat/product-v2`, baseline `d1f8e91`. Perintah:
 
 ```bash
 ./mvnw -o -pl services/product-service -am verify
-bash tests/integration/deploy-local-test.sh
+bash tests/scripts/deploy-local-test.sh
 helm lint deploy/helm/ecommerce -f deploy/helm/ecommerce/stages/product.yaml
 ```
 

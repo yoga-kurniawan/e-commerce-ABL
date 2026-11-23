@@ -331,12 +331,12 @@ Pemeriksaan syntax dan regresi orkestrasi dapat dijalankan tanpa cluster:
 
 ```bash
 bash -n scripts/deploy-local.sh
-bash tests/integration/deploy-local-test.sh
+bash tests/scripts/deploy-local-test.sh
 ```
 
 Tes memakai command doubles untuk menguji perlindungan stage, penanganan Secret,
 values lama, dan penghentian saat gagal. Ini bukan integration test Docker atau
-Kubernetes nyata. Nama folder tests/integration mengikuti lokasi test helper;
+Kubernetes nyata. Script ini berada di `tests/scripts/` karena menguji helper deployment;
 hasilnya tidak membuktikan runtime cluster.
 
 Single replica, PVC lokal, HTTP wildcard, serta port-forward merupakan konfigurasi
