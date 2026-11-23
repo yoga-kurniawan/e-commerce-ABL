@@ -28,7 +28,7 @@ public class OrderPersistenceAdapter implements OrderStore {
     public Order save(Order order) {
         OrderJpaEntity entity = order.getId() == null
                 ? mapper.toEntity(order)
-                : repository.findById(order.getId())
+                : repository.findWithItemsById(order.getId())
                         .map(existing -> {
                             mapper.updateEntity(existing, order);
                             return existing;
@@ -39,7 +39,7 @@ public class OrderPersistenceAdapter implements OrderStore {
 
     @Override
     public Optional<Order> findById(Long orderId) {
-        return repository.findById(orderId).map(mapper::toDomain);
+        return repository.findWithItemsById(orderId).map(mapper::toDomain);
     }
 
     @Override

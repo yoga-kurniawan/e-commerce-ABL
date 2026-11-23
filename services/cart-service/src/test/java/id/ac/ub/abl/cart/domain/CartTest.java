@@ -77,6 +77,15 @@ class CartTest {
     }
 
     @Test
+    void rejectsAddingItemWhenQuantityOverflowsInteger() {
+        Cart cart = Cart.create(101L);
+        ProductSnapshot hugeStock = new ProductSnapshot(1L, "Keyboard", BigDecimal.ONE, Integer.MAX_VALUE);
+        Cart step1 = cart.addItem(hugeStock, Integer.MAX_VALUE);
+
+        assertThrows(InsufficientStockException.class, () -> step1.addItem(hugeStock, 1));
+    }
+
+    @Test
     void rejectsZeroOrNegativeQuantityWhenAdding() {
         Cart cart = Cart.create(101L);
         ProductSnapshot product = new ProductSnapshot(1L, "Keyboard", new BigDecimal("350000"), 10);

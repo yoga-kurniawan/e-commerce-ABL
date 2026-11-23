@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import id.ac.ub.abl.cart.adapter.outbound.database.entity.CartItemJpaEntity;
 import id.ac.ub.abl.cart.adapter.outbound.database.entity.CartJpaEntity;
 import jakarta.persistence.EntityManager;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -107,5 +108,25 @@ class CartSchemaTest {
         jdbc.update("DELETE FROM carts WHERE id = ?", cartId);
 
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM cart_items WHERE cart_id = ?", Integer.class, cartId));
+    }
+
+    @Test
+    void upgradingV1DataToVersionPreservesExistingCartsWithDefaultZeroVersion() {
+        var v1 = Flyway.configure()
+                .dataSource(DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword())
+                .schemas("cart_version_upgrade_test").target("1").load();
+        v1.migrate();
+        Long cartId = jdbc.queryForObject(
+                "INSERT INTO cart_version_upgrade_test.carts (customer_id) VALUES (505) RETURNING id", Long.class);
+
+        var latest = Flyway.configure()
+                .dataSource(DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword())
+                .schemas("cart_version_upgrade_test").load();
+        latest.migrate();
+        latest.validate();
+
+        assertEquals("2", latest.info().current().getVersion().getVersion());
+        assertEquals(0L, jdbc.queryForObject(
+                "SELECT version FROM cart_version_upgrade_test.carts WHERE id = ?", Long.class, cartId));
     }
 }

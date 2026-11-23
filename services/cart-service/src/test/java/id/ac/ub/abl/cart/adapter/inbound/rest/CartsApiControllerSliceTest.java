@@ -57,7 +57,7 @@ class CartsApiControllerSliceTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"customerId\":101}"))
                 .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost/api/v1/carts/10"))
+                .andExpect(header().string("Location", "/api/v1/carts/10"))
                 .andExpect(jsonPath("$.id").value(10))
                 .andExpect(jsonPath("$.customerId").value(101))
                 .andExpect(jsonPath("$.items").isEmpty())
@@ -112,7 +112,7 @@ class CartsApiControllerSliceTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"productId\":1,\"quantity\":2}"))
                 .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost/api/v1/carts/10/items/1"))
+                .andExpect(header().string("Location", "/api/v1/carts/10/items/1"))
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.total").value(700000));
     }

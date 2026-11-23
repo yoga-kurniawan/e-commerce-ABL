@@ -17,4 +17,28 @@ class PaymentApplicationTests extends PaymentIntegrationSupport {
 		assertThat(jdbc.queryForObject("SELECT status FROM payments WHERE id=?", String.class, id)).isEqualTo("PENDING");
 	}
 
+	@Test
+	void actuator_healthReadinessAndPrometheusReturnOk() {
+		assertThat(request("GET", "/actuator/health/readiness", null, null, false, 200)).contains("UP");
+		assertThat(request("GET", "/actuator/prometheus", null, null, false, 200)).contains("jvm_");
+	}
+
+	@Test
+	void json_duplicateKeysAreRejectedWithBadRequest() {
+		String duplicatePayload = "{\"orderId\": 502, \"orderId\": 503, \"method\": \"COD\"}";
+		error(request("POST", BASE, duplicatePayload, "idemp-dupe", false, 400), "BAD_REQUEST");
+	}
+
+	@Test
+	void outbound_propagatesCorrelationHeaderAndTracing() {
+		orders().reset();
+		requestWithHeaders("POST", BASE, "{\"orderId\": 504, \"method\": \"COD\"}",
+				"idemp-prop", false, java.util.Map.of("x-request-id", "pay-req-789"), 201);
+
+		var headers = orders().requestHeaders.poll();
+		assertThat(headers).isNotNull();
+		assertThat(headers.getFirst("x-request-id")).isEqualTo("pay-req-789");
+		assertThat(headers.getFirst("traceparent")).isNotBlank();
+	}
+
 }

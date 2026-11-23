@@ -1,6 +1,7 @@
 package id.ac.ub.abl.cart.adapter.outbound.database;
 
 import java.util.Optional;
+import java.util.function.UnaryOperator;
 
 import id.ac.ub.abl.cart.adapter.outbound.database.entity.CartJpaEntity;
 import id.ac.ub.abl.cart.adapter.outbound.database.mapper.CartPersistenceMapper;
@@ -26,7 +27,7 @@ public class CartPersistenceAdapter implements CartStore {
     public Cart save(Cart cart) {
         CartJpaEntity entity;
         if (cart.getId() != null) {
-            Optional<CartJpaEntity> existing = repository.findById(cart.getId());
+            Optional<CartJpaEntity> existing = repository.findByIdForOptimisticUpdate(cart.getId());
             if (existing.isPresent()) {
                 entity = existing.get();
                 mapper.updateEntity(entity, cart);
@@ -36,7 +37,17 @@ public class CartPersistenceAdapter implements CartStore {
         } else {
             entity = mapper.toEntity(cart);
         }
-        return mapper.toDomain(repository.save(entity));
+        return mapper.toDomain(repository.saveAndFlush(entity));
+    }
+
+    @Override
+    @Transactional
+    public Optional<Cart> update(Long cartId, UnaryOperator<Cart> mutator) {
+        return repository.findByIdForOptimisticUpdate(cartId).map(entity -> {
+            Cart updated = mutator.apply(mapper.toDomain(entity));
+            mapper.updateEntity(entity, updated);
+            return mapper.toDomain(repository.saveAndFlush(entity));
+        });
     }
 
     @Override

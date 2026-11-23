@@ -3,7 +3,9 @@ package id.ac.ub.abl.product.adapter.exception;
 import id.ac.ub.abl.product.domain.exception.DomainRuleViolation;
 import id.ac.ub.abl.product.usecase.exception.ProductNotFoundException;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -52,6 +54,17 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
     }
 
+    @Test
+    void concurrencyAndIntegrityViolationsReturn409Conflict() throws Exception {
+        http.perform(get("/test/optimistic"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONFLICT"))
+                .andExpect(jsonPath("$.stackTrace").doesNotExist());
+        http.perform(get("/test/integrity"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONFLICT"));
+    }
+
     @RestController
     static class FailingController {
         @GetMapping("/test/{kind}")
@@ -59,6 +72,8 @@ class GlobalExceptionHandlerTest {
             switch (kind) {
                 case "domain" -> throw new DomainRuleViolation("Stok produk tidak boleh negatif");
                 case "missing" -> throw new ProductNotFoundException(123L);
+                case "optimistic" -> throw new ObjectOptimisticLockingFailureException("ProductJpaEntity", 1L);
+                case "integrity" -> throw new DataIntegrityViolationException("constraint violation");
                 default -> throw new IllegalStateException("Internal database detail that must not reach the client");
             }
         }

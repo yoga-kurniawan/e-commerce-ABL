@@ -10,8 +10,8 @@ import id.ac.ub.abl.cart.usecase.exception.ProductNotFoundException;
 import id.ac.ub.abl.cart.usecase.port.out.CartStore;
 import id.ac.ub.abl.cart.usecase.port.out.ProductLookup;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+/** Lookup HTTP Product dilakukan di luar transaksi database; penyimpanan memakai transaksi lokal singkat. */
 @Service
 public class PatchCartItemUseCase {
     private final CartStore cartStore;
@@ -22,7 +22,6 @@ public class PatchCartItemUseCase {
         this.productLookup = productLookup;
     }
 
-    @Transactional
     public Cart execute(PatchCartItemCommand command) {
         if (!command.hasChanges()) {
             throw new DomainRuleViolation("PATCH harus memuat minimal satu atribut");
@@ -40,7 +39,11 @@ public class PatchCartItemUseCase {
         ProductSnapshot product = productLookup.findById(command.productId())
                 .orElseThrow(() -> new ProductNotFoundException(command.productId()));
 
-        Cart updated = cart.replaceItemQuantity(command.productId(), command.quantity().value(), product.stock());
-        return cartStore.save(updated);
+        return cartStore.update(command.cartId(), latest -> {
+            if (latest.findItem(command.productId()).isEmpty()) {
+                throw new CartItemNotFoundException(command.cartId(), command.productId());
+            }
+            return latest.replaceItemQuantity(command.productId(), command.quantity().value(), product.stock());
+        }).orElseThrow(() -> new CartNotFoundException(command.cartId()));
     }
 }

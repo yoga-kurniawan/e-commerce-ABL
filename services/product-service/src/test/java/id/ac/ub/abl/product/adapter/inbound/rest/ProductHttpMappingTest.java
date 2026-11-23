@@ -60,6 +60,8 @@ class ProductHttpMappingTest {
             "{\"name\":\"Keyboard\",\"stock\":1}",
             "{\"name\":\"Keyboard\",\"price\":1}",
             "{\"name\":null,\"price\":1,\"stock\":1}",
+            "{\"name\":\"\",\"price\":1,\"stock\":1}",
+            "{\"name\":\"   \",\"price\":1,\"stock\":1}",
             "{\"name\":\"Keyboard\",\"price\":null,\"stock\":1}",
             "{\"name\":\"Keyboard\",\"price\":1,\"stock\":null}",
             "{\"name\":\"Keyboard\",\"price\":-0.01,\"stock\":1}",
@@ -93,7 +95,8 @@ class ProductHttpMappingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"{}", "{\"name\":null}", "{\"price\":null}", "{\"stock\":null}",
+    @ValueSource(strings = {"{}", "{\"name\":null}", "{\"name\":\"\"}", "{\"name\":\"   \"}",
+            "{\"price\":null}", "{\"stock\":null}",
             "{\"price\":-0.01}", "{\"stock\":-1}"})
     void patchRejectsEmptyNullAndNegativeValues(String body) {
         assertFalse(VALIDATOR.validate(json.readValue(body, ProductPatchInput.class)).isEmpty());

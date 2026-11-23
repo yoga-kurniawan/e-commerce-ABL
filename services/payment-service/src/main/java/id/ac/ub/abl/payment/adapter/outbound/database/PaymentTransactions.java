@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.sql.SQLException;
 import java.util.function.Supplier;
 import id.ac.ub.abl.payment.usecase.exception.PaymentOperationException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.dao.DataAccessException;
@@ -16,18 +17,32 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Component
 public class PaymentTransactions {
     private final TransactionTemplate transactions;
+    private final TransactionTemplate readOnlyTransactions;
     private final PaymentDatabaseSession session;
     private final Duration lockBudget;
     private final Duration lease;
+    @Autowired
     public PaymentTransactions(PlatformTransactionManager manager, PaymentDatabaseSession session,
             @Value("${payment.persistence.lock-timeout-ms:250}") long lockMillis,
-            @Value("${payment.persistence.claim-lease-ms:30000}") long leaseMillis) {
-        if (lockMillis < 1 || leaseMillis < 1) { throw new IllegalArgumentException("Durasi persistence harus positif"); }
+            @Value("${payment.persistence.claim-lease-ms:30000}") long leaseMillis,
+            @Value("${payment.persistence.read-timeout-seconds:3}") int readTimeoutSeconds) {
+        if (lockMillis < 1 || leaseMillis < 1 || readTimeoutSeconds < 1) {
+            throw new IllegalArgumentException("Durasi persistence harus positif");
+        }
         this.session = session;
         this.lockBudget = Duration.ofMillis(lockMillis);
         this.lease = Duration.ofMillis(leaseMillis);
         this.transactions = new TransactionTemplate(manager);
         this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.readOnlyTransactions = new TransactionTemplate(manager);
+        this.readOnlyTransactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+        this.readOnlyTransactions.setReadOnly(true);
+        this.readOnlyTransactions.setTimeout(readTimeoutSeconds);
+    }
+
+    public PaymentTransactions(PlatformTransactionManager manager, PaymentDatabaseSession session,
+            long lockMillis, long leaseMillis) {
+        this(manager, session, lockMillis, leaseMillis, 3);
     }
     public Duration lease() { return lease; }
     public <T> T creation(Supplier<T> action) {
@@ -75,6 +90,18 @@ public class PaymentTransactions {
                 }
             }
             // Termasuk hasil commit ambigu. Tidak pernah menghapus klaim atau menyatakan Payment FAILED.
+            throw new PaymentOperationException("DEPENDENCY_UNAVAILABLE", "Hasil database perlu diperiksa kembali menggunakan key yang sama", failure);
+        }
+    }
+    public <T> T runReadOnly(String failureCode, Supplier<T> action) {
+        try {
+            return readOnlyTransactions.execute(tx -> action.get());
+        } catch (DataAccessException | TransactionException failure) {
+            for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+                if (cause instanceof SQLException sql && "55P03".equals(sql.getSQLState())) {
+                    throw new PaymentOperationException(failureCode, "Operasi pembayaran sedang diproses", failure);
+                }
+            }
             throw new PaymentOperationException("DEPENDENCY_UNAVAILABLE", "Hasil database perlu diperiksa kembali menggunakan key yang sama", failure);
         }
     }

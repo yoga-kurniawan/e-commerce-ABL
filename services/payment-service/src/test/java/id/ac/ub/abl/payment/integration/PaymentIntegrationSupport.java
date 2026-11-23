@@ -65,12 +65,25 @@ public abstract class PaymentIntegrationSupport {
         orders().reset();
     }
     protected String request(String method, String path, String body, String key, boolean simulator, int status) {
+        return requestWithHeaders(method, path, body, key, simulator, null, status);
+    }
+
+    protected String requestWithHeaders(String method, String path, String body, String key, boolean simulator,
+                                        java.util.Map<String, String> extraHeaders, int status) {
         var request = http.method(HttpMethod.valueOf(method)).uri(path).contentType(MediaType.APPLICATION_JSON);
         if (key != null) { request.header("Idempotency-Key", key); }
         if (simulator) { request.header("X-Simulator-Token", TOKEN); }
-        return request.body(body == null ? "" : body).exchange().expectStatus().isEqualTo(status)
-                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
-                .expectBody(String.class).returnResult().getResponseBody();
+        if (extraHeaders != null) {
+            extraHeaders.forEach(request::header);
+        }
+        var spec = request.body(body == null ? "" : body).exchange().expectStatus().isEqualTo(status);
+        if (status == 204) {
+            return "";
+        }
+        if (!path.startsWith("/actuator")) {
+            spec = spec.expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON);
+        }
+        return spec.expectBody(String.class).returnResult().getResponseBody();
     }
     protected String create(String key, long order, String method, int status) {
         return request("POST", BASE, "{\"orderId\":" + order + ",\"method\":\"" + method + "\"}", key, false, status);
@@ -98,6 +111,7 @@ public abstract class PaymentIntegrationSupport {
         private final HttpServer server;
         private final ExecutorService executor = Executors.newCachedThreadPool();
         public final ConcurrentLinkedQueue<String> requests = new ConcurrentLinkedQueue<>();
+        public final ConcurrentLinkedQueue<com.sun.net.httpserver.Headers> requestHeaders = new ConcurrentLinkedQueue<>();
         public final AtomicReference<Reply> reply = new AtomicReference<>();
         OrderStub() {
             try {
@@ -105,6 +119,7 @@ public abstract class PaymentIntegrationSupport {
                 server.setExecutor(executor);
                 server.createContext("/", exchange -> {
                     requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+                    requestHeaders.add(exchange.getRequestHeaders());
                     try { reply.get().send(exchange); }
                     catch (Exception failure) { exchange.close(); }
                 });
@@ -112,7 +127,7 @@ public abstract class PaymentIntegrationSupport {
             } catch (java.io.IOException failure) { throw new IllegalStateException(failure); }
         }
         public String url() { return "http://127.0.0.1:" + server.getAddress().getPort(); }
-        public void reset() { requests.clear(); reply.set(this::success); }
+        public void reset() { requests.clear(); requestHeaders.clear(); reply.set(this::success); }
         public void success(HttpExchange exchange) throws Exception {
             String path = exchange.getRequestURI().getPath();
             String id = path.substring(path.lastIndexOf('/') + 1);

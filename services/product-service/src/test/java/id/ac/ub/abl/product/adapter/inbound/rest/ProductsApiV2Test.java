@@ -190,7 +190,8 @@ class ProductsApiV2Test {
     }
 
     @ParameterizedTest @ValueSource(strings = {
-            "{}", "{\"name\":null}", "{\"price\":null}", "{\"stock\":null}",
+            "{}", "{\"name\":null}", "{\"name\":\"\"}", "{\"name\":\"   \"}",
+            "{\"price\":null}", "{\"stock\":null}",
             "{\"price\":-1}", "{\"stock\":-1}", "{\"stock\":1.5}"
     })
     void invalidPatchDoesNotMutateProduct(String body) throws Exception {
@@ -224,6 +225,8 @@ class ProductsApiV2Test {
     @ParameterizedTest @ValueSource(strings = {
             "{}", "{\"price\":1,\"stock\":1}", "{\"name\":\"K\",\"stock\":1}",
             "{\"name\":\"K\",\"price\":1}", "{\"name\":null,\"price\":1,\"stock\":1}",
+            "{\"name\":\"\",\"price\":1,\"stock\":1}",
+            "{\"name\":\"   \",\"price\":1,\"stock\":1}",
             "{\"name\":\"K\",\"price\":-1,\"stock\":1}",
             "{\"name\":\"K\",\"price\":1,\"stock\":-1}",
             "{\"name\":\"K\",\"price\":1,\"stock\":1.5}"

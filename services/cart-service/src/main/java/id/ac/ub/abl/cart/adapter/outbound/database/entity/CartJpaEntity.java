@@ -10,7 +10,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 /** Mapping penyimpanan Cart; aturan bisnis tetap berada pada domain Cart. */
 @Entity
@@ -23,7 +25,12 @@ public class CartJpaEntity {
     @Column(name = "customer_id", nullable = false)
     private Long customerId;
 
-    @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
+    @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("id")
     private List<CartItemJpaEntity> items = new ArrayList<>();
 
     protected CartJpaEntity() {
@@ -36,6 +43,7 @@ public class CartJpaEntity {
 
     public Long getId() { return id; }
     public Long getCustomerId() { return customerId; }
+    public Long getVersion() { return version; }
     public List<CartItemJpaEntity> getItems() { return items; }
 
     public void addItem(CartItemJpaEntity item) {

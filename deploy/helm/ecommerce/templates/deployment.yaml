@@ -4,24 +4,37 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $.Release.Name }}-{{ $name }}-service
+  name: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}
   namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $name }}-service
-    app.kubernetes.io/instance: {{ $.Release.Name }}
+    {{- include "ecommerce.serviceLabels" (dict "serviceName" $name "context" $) | nindent 4 }}
 spec:
-  replicas: {{ $.Values.replicaCount }}
+  replicas: {{ $service.replicaCount | default $.Values.replicaCount }}
+  {{- with ($service.strategy | default $.Values.strategy) }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ $name }}-service
-      app.kubernetes.io/instance: {{ $.Release.Name }}
+      {{- include "ecommerce.selectorLabels" (dict "serviceName" $name "context" $) | nindent 6 }}
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: {{ $.Values.management.port | quote }}
+        {{- with $.Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with $service.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       labels:
-        app.kubernetes.io/name: {{ $name }}-service
-        app.kubernetes.io/instance: {{ $.Release.Name }}
+        {{- include "ecommerce.serviceLabels" (dict "serviceName" $name "context" $) | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "ecommerce.serviceAccountName" (dict "serviceName" $name "context" $) }}
       automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
       {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -46,14 +59,26 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          {{- if gt (int ($.Values.preStopSleepSeconds | default 0)) 0 }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep {{ $.Values.preStopSleepSeconds }}"]
+          {{- end }}
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: {{ $.Values.service.port }}
+              protocol: TCP
+            - name: management
+              containerPort: {{ $.Values.management.port }}
+              protocol: TCP
           env:
             - name: SERVER_PORT
-              value: "8080"
+              value: {{ $.Values.service.port | quote }}
+            - name: MANAGEMENT_SERVER_PORT
+              value: {{ $.Values.management.port | quote }}
             - name: JAVA_TOOL_OPTIONS
-              value: "-XX:MaxRAMPercentage=65.0"
+              value: {{ $service.javaToolOptions | default $.Values.javaToolOptions | quote }}
             - name: SPRING_DATASOURCE_URL
               value: {{ printf "jdbc:postgresql://%s:%v/%s" $service.database.host $service.database.port $service.database.name | quote }}
             - name: SPRING_DATASOURCE_USERNAME
@@ -73,41 +98,47 @@ spec:
             - name: SPRING_FLYWAY_ENABLED
               value: "true"
             - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
-              value: "health"
+              value: "health,info,prometheus"
             - name: MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED
               value: "true"
             - name: MANAGEMENT_ENDPOINT_HEALTH_GROUP_READINESS_INCLUDE
               value: "readinessState,db"
+            {{- $clientJson := include "ecommerce.clientUrlsJson" (dict "serviceName" $name "context" $) -}}
+            {{- if $clientJson }}
             # Gunakan nama property tepat, termasuk tanda hubung pada *-url.
             - name: SPRING_APPLICATION_JSON
-              value: {{ dict "clients" (dict "product-url" (printf "http://%s-product-service:8080" $.Release.Name) "cart-url" (printf "http://%s-cart-service:8080" $.Release.Name) "order-url" (printf "http://%s-order-service:8080" $.Release.Name) "payment-url" (printf "http://%s-payment-service:8080" $.Release.Name)) | toJson | quote }}
+              value: {{ $clientJson | quote }}
+            {{- end }}
+          {{- $probes := $service.probes | default $.Values.probes }}
           startupProbe:
             httpGet:
-              path: /actuator/health/liveness
-              port: http
-            periodSeconds: 5
-            failureThreshold: 60
+              path: {{ $probes.startup.path }}
+              port: management
+            periodSeconds: {{ $probes.startup.periodSeconds }}
+            timeoutSeconds: {{ $probes.startup.timeoutSeconds | default 2 }}
+            failureThreshold: {{ $probes.startup.failureThreshold }}
           readinessProbe:
             httpGet:
-              path: /actuator/health/readiness
-              port: http
-            periodSeconds: 5
-            timeoutSeconds: 2
-            failureThreshold: 3
+              path: {{ $probes.readiness.path }}
+              port: management
+            periodSeconds: {{ $probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ $probes.readiness.timeoutSeconds | default 2 }}
+            failureThreshold: {{ $probes.readiness.failureThreshold }}
           livenessProbe:
             httpGet:
-              path: /actuator/health/liveness
-              port: http
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 3
+              path: {{ $probes.liveness.path }}
+              port: management
+            periodSeconds: {{ $probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ $probes.liveness.timeoutSeconds | default 2 }}
+            failureThreshold: {{ $probes.liveness.failureThreshold }}
           resources:
-            {{- toYaml $.Values.resources | nindent 12 }}
+            {{- toYaml ($service.resources | default $.Values.resources) | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: {{ $.Values.tmpSizeLimit }}
 {{- end }}
 {{- end }}

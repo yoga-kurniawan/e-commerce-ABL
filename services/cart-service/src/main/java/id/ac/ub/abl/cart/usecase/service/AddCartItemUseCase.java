@@ -8,8 +8,8 @@ import id.ac.ub.abl.cart.usecase.exception.ProductNotFoundException;
 import id.ac.ub.abl.cart.usecase.port.out.CartStore;
 import id.ac.ub.abl.cart.usecase.port.out.ProductLookup;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+/** Lookup HTTP Product dilakukan di luar transaksi database; penyimpanan memakai transaksi lokal singkat. */
 @Service
 public class AddCartItemUseCase {
     private final CartStore cartStore;
@@ -20,15 +20,14 @@ public class AddCartItemUseCase {
         this.productLookup = productLookup;
     }
 
-    @Transactional
     public Cart execute(AddCartItemCommand command) {
-        Cart cart = cartStore.findById(command.cartId())
+        cartStore.findById(command.cartId())
                 .orElseThrow(() -> new CartNotFoundException(command.cartId()));
 
         ProductSnapshot product = productLookup.findById(command.productId())
                 .orElseThrow(() -> new ProductNotFoundException(command.productId()));
 
-        Cart updated = cart.addItem(product, command.quantity());
-        return cartStore.save(updated);
+        return cartStore.update(command.cartId(), cart -> cart.addItem(product, command.quantity()))
+                .orElseThrow(() -> new CartNotFoundException(command.cartId()));
     }
 }

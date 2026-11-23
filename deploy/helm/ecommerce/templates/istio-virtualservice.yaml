@@ -1,0 +1,130 @@
+{{- if .Values.istio.enabled }}
+{{- range $name, $service := .Values.services }}
+{{- if $service.enabled }}
+{{- $timeout := $.Values.istio.timeout | default "10s" }}
+{{- if and $service.istio $service.istio.timeout }}
+{{- $timeout = $service.istio.timeout }}
+{{- end }}
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}-ingress
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ecommerce.serviceLabels" (dict "serviceName" $name "context" $) | nindent 4 }}
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - {{ $.Values.istio.gateway }}
+  http:
+    - name: {{ $name }}-safe
+      match:
+        - uri:
+            exact: /api/v1/{{ $name }}s
+          method:
+            regex: "GET|HEAD"
+        - uri:
+            prefix: /api/v1/{{ $name }}s/
+          method:
+            regex: "GET|HEAD"
+        - uri:
+            exact: /api/v2/{{ $name }}s
+          method:
+            regex: "GET|HEAD"
+        - uri:
+            prefix: /api/v2/{{ $name }}s/
+          method:
+            regex: "GET|HEAD"
+      route:
+        - destination:
+            host: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ $.Values.service.port }}
+      timeout: {{ $timeout }}
+      retries:
+        attempts: {{ $.Values.istio.retries.attempts | default 2 }}
+        perTryTimeout: {{ $.Values.istio.retries.perTryTimeout | default "3s" }}
+        retryOn: {{ $.Values.istio.retries.retryOn | default "connect-failure,refused-stream,5xx" }}
+    - name: {{ $name }}-mutation
+      match:
+        - uri:
+            exact: /api/v1/{{ $name }}s
+        - uri:
+            prefix: /api/v1/{{ $name }}s/
+        - uri:
+            exact: /api/v2/{{ $name }}s
+        - uri:
+            prefix: /api/v2/{{ $name }}s/
+      route:
+        - destination:
+            host: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ $.Values.service.port }}
+      timeout: {{ $timeout }}
+      retries:
+        attempts: 0
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}-mesh
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ecommerce.serviceLabels" (dict "serviceName" $name "context" $) | nindent 4 }}
+spec:
+  hosts:
+    - {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
+  gateways:
+    - mesh
+  http:
+    - name: {{ $name }}-mesh-safe
+      match:
+        - uri:
+            exact: /api/v1/{{ $name }}s
+          method:
+            regex: "GET|HEAD"
+        - uri:
+            prefix: /api/v1/{{ $name }}s/
+          method:
+            regex: "GET|HEAD"
+        - uri:
+            exact: /api/v2/{{ $name }}s
+          method:
+            regex: "GET|HEAD"
+        - uri:
+            prefix: /api/v2/{{ $name }}s/
+          method:
+            regex: "GET|HEAD"
+      route:
+        - destination:
+            host: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ $.Values.service.port }}
+      timeout: {{ $timeout }}
+      retries:
+        attempts: {{ $.Values.istio.retries.attempts | default 2 }}
+        perTryTimeout: {{ $.Values.istio.retries.perTryTimeout | default "3s" }}
+        retryOn: {{ $.Values.istio.retries.retryOn | default "connect-failure,refused-stream,5xx" }}
+    - name: {{ $name }}-mesh-mutation
+      match:
+        - uri:
+            exact: /api/v1/{{ $name }}s
+        - uri:
+            prefix: /api/v1/{{ $name }}s/
+        - uri:
+            exact: /api/v2/{{ $name }}s
+        - uri:
+            prefix: /api/v2/{{ $name }}s/
+      route:
+        - destination:
+            host: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ $.Values.service.port }}
+      timeout: {{ $timeout }}
+      retries:
+        attempts: 0
+{{- end }}
+{{- end }}
+{{- end }}

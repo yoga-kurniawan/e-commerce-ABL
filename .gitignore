@@ -31,7 +31,6 @@
 hs_err_pid*
 /logs/
 /tests/load/results/
-/tests/postman/results/
 
 # Operating-system metadata.
 .DS_Store

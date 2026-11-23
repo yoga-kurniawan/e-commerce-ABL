@@ -145,7 +145,9 @@ class ProductsApiControllerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"{}", "{\"name\":\"Keyboard\",\"price\":-1,\"stock\":20}",
+    @ValueSource(strings = {"{}", "{\"name\":\"\",\"price\":1,\"stock\":1}",
+            "{\"name\":\"   \",\"price\":1,\"stock\":1}",
+            "{\"name\":\"Keyboard\",\"price\":-1,\"stock\":20}",
             "{\"name\":\"Keyboard\",\"price\":1,\"stock\":-1}"})
     void invalidCreateAndPutReturn400WithoutChangingData(String body) throws Exception {
         http.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(body))
@@ -161,7 +163,8 @@ class ProductsApiControllerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"{}", "{\"name\":null}", "{\"price\":null}", "{\"stock\":null}",
+    @ValueSource(strings = {"{}", "{\"name\":null}", "{\"name\":\"\"}", "{\"name\":\"   \"}",
+            "{\"price\":null}", "{\"stock\":null}",
             "{\"price\":-1}", "{\"stock\":-1}"})
     void invalidPatchReturns400WithoutChangingData(String body) throws Exception {
         long id = createProduct();

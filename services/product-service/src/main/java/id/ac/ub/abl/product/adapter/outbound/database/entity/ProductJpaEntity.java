@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 /** Mapping penyimpanan; aturan bisnis tetap berada pada domain Product. */
 @Entity
@@ -32,6 +33,10 @@ public class ProductJpaEntity {
     @Column(length = 1000)
     private String description;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     protected ProductJpaEntity() {
     }
 
@@ -52,10 +57,20 @@ public class ProductJpaEntity {
         this.description = description;
     }
 
+    /** Memperbarui entity managed agar @Version optimistic locking terjaga tanpa merge overwrite. */
+    public void updateState(String name, BigDecimal price, Integer stock, boolean active, String description) {
+        this.name = name;
+        this.price = price;
+        this.stock = stock;
+        this.active = active;
+        this.description = description;
+    }
+
     public Long getId() { return id; }
     public String getName() { return name; }
     public BigDecimal getPrice() { return price; }
     public Integer getStock() { return stock; }
     public boolean isActive() { return active; }
     public String getDescription() { return description; }
+    public Long getVersion() { return version; }
 }

@@ -1,43 +1,82 @@
 package id.ac.ub.abl.order.configuration;
 
-import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ThreadPoolExecutor;
 
-import org.springframework.beans.factory.annotation.Value;
+import id.ac.ub.abl.order.adapter.outbound.rest.CartApiClient;
+import id.ac.ub.abl.order.adapter.outbound.rest.PaymentApiClient;
+import id.ac.ub.abl.order.adapter.outbound.rest.ProductApiClient;
+import io.micrometer.context.ContextSnapshot;
+import io.micrometer.context.ContextSnapshotFactory;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
+import org.slf4j.MDC;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.web.client.RestClient;
+import org.springframework.core.task.TaskDecorator;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.service.registry.ImportHttpServices;
 
-/** Client HTTP ke Cart dan Product; URL dari property clients.* yang diatur helper/Helm. */
-@Configuration
+/** Registrasi client deklaratif Cart/Product/Payment dan executor bounded untuk lookup produk paralel. */
+@Configuration(proxyBeanMethods = false)
+@ImportHttpServices(group = "carts", types = CartApiClient.class)
+@ImportHttpServices(group = "products", types = ProductApiClient.class)
+@ImportHttpServices(group = "payments", types = PaymentApiClient.class)
 public class RestClientConfiguration {
 
-    @Bean
-    public RestClient cartRestClient(RestClient.Builder builder,
-                                     @Value("${clients.cart-url:http://127.0.0.1:8082}") String cartUrl) {
-        return build(builder, cartUrl);
+    @Bean(name = "productLookupExecutor")
+    public ThreadPoolTaskExecutor productLookupExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(64);
+        executor.setThreadNamePrefix("product-lookup-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setTaskDecorator(contextPropagatingDecorator());
+        executor.initialize();
+        return executor;
     }
 
-    @Bean
-    public RestClient productRestClient(RestClient.Builder builder,
-                                        @Value("${clients.product-url:http://127.0.0.1:8081}") String productUrl) {
-        return build(builder, productUrl);
-    }
+    private static final ContextSnapshotFactory CONTEXT_SNAPSHOT_FACTORY =
+            ContextSnapshotFactory.builder().build();
 
-    /** Dipakai pembatalan Order untuk GET /api/v2/payments?orderId= (DEC-023). */
-    @Bean
-    public RestClient paymentRestClient(RestClient.Builder builder,
-                                        @Value("${clients.payment-url:http://127.0.0.1:8084}") String paymentUrl) {
-        return build(builder, paymentUrl);
-    }
-
-    private static RestClient build(RestClient.Builder builder, String baseUrl) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofSeconds(3));
-        requestFactory.setReadTimeout(Duration.ofSeconds(5));
-        return builder.clone()
-                .baseUrl(baseUrl)
-                .requestFactory(requestFactory)
-                .build();
+    private static TaskDecorator contextPropagatingDecorator() {
+        return runnable -> {
+            RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+            Map<String, String> mdcContext = MDC.getCopyOfContextMap();
+            Context otelContext = Context.current();
+            ContextSnapshot snapshot = CONTEXT_SNAPSHOT_FACTORY.captureAll();
+            return () -> {
+                RequestAttributes previousAttributes = RequestContextHolder.getRequestAttributes();
+                Map<String, String> previousMdc = MDC.getCopyOfContextMap();
+                try (Scope otelScope = otelContext.makeCurrent();
+                     ContextSnapshot.Scope ignored = snapshot.setThreadLocals()) {
+                    if (requestAttributes != null) {
+                        RequestContextHolder.setRequestAttributes(requestAttributes);
+                    } else {
+                        RequestContextHolder.resetRequestAttributes();
+                    }
+                    if (mdcContext != null) {
+                        MDC.setContextMap(mdcContext);
+                    } else {
+                        MDC.clear();
+                    }
+                    runnable.run();
+                } finally {
+                    if (previousAttributes != null) {
+                        RequestContextHolder.setRequestAttributes(previousAttributes);
+                    } else {
+                        RequestContextHolder.resetRequestAttributes();
+                    }
+                    if (previousMdc != null) {
+                        MDC.setContextMap(previousMdc);
+                    } else {
+                        MDC.clear();
+                    }
+                }
+            };
+        };
     }
 }

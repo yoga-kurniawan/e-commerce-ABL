@@ -19,7 +19,7 @@ import id.ac.ub.abl.cart.usecase.service.PatchCartItemUseCase;
 import id.ac.ub.abl.cart.usecase.service.ReplaceCartItemUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @RestController
 public class CartsApiController implements CartsApi {
@@ -50,8 +50,8 @@ public class CartsApiController implements CartsApi {
     @Override
     public ResponseEntity<CartOutput> createCart(CartInput input) {
         Cart cart = createCart.execute(mapper.toCreateCommand(input));
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{cartId}").buildAndExpand(cart.getId()).toUri();
+        URI location = UriComponentsBuilder.fromPath("/api/v1/carts/{cartId}")
+                .buildAndExpand(cart.getId()).toUri();
         return ResponseEntity.created(location).body(mapper.toOutput(cart));
     }
 
@@ -64,8 +64,8 @@ public class CartsApiController implements CartsApi {
     @Override
     public ResponseEntity<CartOutput> addItem(Long cartId, CartItemInput input) {
         Cart cart = addCartItem.execute(mapper.toAddCommand(cartId, input));
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{productId}").buildAndExpand(input.productId()).toUri();
+        URI location = UriComponentsBuilder.fromPath("/api/v1/carts/{cartId}/items/{productId}")
+                .buildAndExpand(cartId, input.productId()).toUri();
         return ResponseEntity.created(location).body(mapper.toOutput(cart));
     }
 

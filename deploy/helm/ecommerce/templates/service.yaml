@@ -4,19 +4,17 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $.Release.Name }}-{{ $name }}-service
+  name: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}
   namespace: {{ $.Release.Namespace }}
   labels:
-    app.kubernetes.io/name: {{ $name }}-service
-    app.kubernetes.io/instance: {{ $.Release.Name }}
+    {{- include "ecommerce.serviceLabels" (dict "serviceName" $name "context" $) | nindent 4 }}
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: {{ $name }}-service
-    app.kubernetes.io/instance: {{ $.Release.Name }}
+    {{- include "ecommerce.selectorLabels" (dict "serviceName" $name "context" $) | nindent 4 }}
   ports:
     - name: http
-      port: 8080
+      port: {{ $.Values.service.port }}
       targetPort: http
       appProtocol: http
 {{- end }}

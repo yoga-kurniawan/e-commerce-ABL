@@ -48,9 +48,9 @@ public class ProductPatchInput {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "Nama produk tidak boleh null")
+    @AssertTrue(message = "Nama produk tidak boleh kosong")
     public boolean isNameValid() {
-        return !nameSupplied || name != null;
+        return !nameSupplied || (name != null && !name.isBlank());
     }
 
     @JsonIgnore

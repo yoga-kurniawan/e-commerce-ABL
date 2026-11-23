@@ -14,6 +14,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import id.ac.ub.abl.order.domain.OrderStatus;
 
@@ -38,7 +39,11 @@ public class OrderJpaEntity {
     @Column(name = "shipping_address", columnDefinition = "text")
     private String shippingAddress;
 
-    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("id")
     private List<OrderItemJpaEntity> items = new ArrayList<>();
 
@@ -60,6 +65,7 @@ public class OrderJpaEntity {
     public void setStatus(OrderStatus status) { this.status = status; }
     public String getShippingAddress() { return shippingAddress; }
     public void setShippingAddress(String shippingAddress) { this.shippingAddress = shippingAddress; }
+    public Long getVersion() { return version; }
     public List<OrderItemJpaEntity> getItems() { return items; }
 
     public void addItem(OrderItemJpaEntity item) {

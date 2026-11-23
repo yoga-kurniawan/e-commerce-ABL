@@ -24,11 +24,11 @@ public class PaymentPersistenceAdapter implements PaymentStore {
         this.session = session; this.transactions = transactions;
     }
     public Optional<Payment> findById(Long id) {
-        return transactions.run("PAYMENT_OPERATION_BUSY", () -> payments.findById(id).map(mapper::toDomain));
+        return transactions.runReadOnly("PAYMENT_OPERATION_BUSY", () -> payments.findById(id).map(mapper::toDomain));
     }
     @Override
     public List<Payment> findByOrderId(Long orderId) {
-        return transactions.run("DEPENDENCY_UNAVAILABLE", () -> payments.findByOrderIdOrderByIdAsc(orderId)
+        return transactions.runReadOnly("DEPENDENCY_UNAVAILABLE", () -> payments.findByOrderIdOrderByIdAsc(orderId)
                 .stream().map(mapper::toDomain).toList());
     }
     public Payment changeReference(PatchPaymentCommand command) {

@@ -22,7 +22,7 @@ public final class Product {
     }
 
     private Product(Long id, String name, BigDecimal price, Integer stock, boolean active, String description) {
-        if (name == null) {
+        if (name == null || name.isBlank()) {
             throw new DomainRuleViolation("Nama produk wajib diisi");
         }
         if (price == null || price.signum() < 0) {

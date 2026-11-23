@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
@@ -47,12 +48,15 @@ class ProductsRepositoryTest {
         assertEquals("Keyboard", stored.getName());
         assertEquals(0, new BigDecimal("350000.125").compareTo(stored.getPrice()));
         assertEquals(20, stored.getStock());
+        assertEquals(0L, stored.getVersion());
 
-        repository.saveAndFlush(new ProductJpaEntity(id, "Mouse", new BigDecimal("150000"), 15));
+        stored.updateState("Mouse", new BigDecimal("150000"), 15, true, null);
+        repository.saveAndFlush(stored);
         var updated = repository.findById(id).orElseThrow();
         assertEquals("Mouse", updated.getName());
         assertEquals(0, new BigDecimal("150000").compareTo(updated.getPrice()));
         assertEquals(15, updated.getStock());
+        assertEquals(1L, updated.getVersion());
         assertEquals(1, repository.count());
 
         repository.delete(updated);
@@ -78,9 +82,27 @@ class ProductsRepositoryTest {
     void rejectsInvalidUpdateAndPreservesStoredProduct() {
         var created = repository.saveAndFlush(new ProductJpaEntity(null, "Keyboard", BigDecimal.ONE, 10));
 
-        assertThrows(DataIntegrityViolationException.class, () -> repository.saveAndFlush(
-                new ProductJpaEntity(created.getId(), "Keyboard", BigDecimal.ONE, -1)));
+        created.updateState("Keyboard", BigDecimal.ONE, -1, true, null);
+        assertThrows(DataIntegrityViolationException.class, () -> repository.saveAndFlush(created));
 
         assertEquals(10, repository.findById(created.getId()).orElseThrow().getStock());
+    }
+
+    @Test
+    void rejectsStaleVersionUpdateWithOptimisticLockingFailure() {
+        var created = repository.saveAndFlush(new ProductJpaEntity(null, "Keyboard", BigDecimal.ONE, 10));
+        var firstCopy = repository.findById(created.getId()).orElseThrow();
+        var secondCopy = repository.findById(created.getId()).orElseThrow();
+
+        firstCopy.updateState("Keyboard V2", BigDecimal.TEN, 8, true, null);
+        repository.saveAndFlush(firstCopy);
+
+        secondCopy.updateState("Stale Write", BigDecimal.ONE, 5, true, null);
+        assertThrows(ObjectOptimisticLockingFailureException.class, () -> repository.saveAndFlush(secondCopy));
+
+        var latest = repository.findById(created.getId()).orElseThrow();
+        assertEquals("Keyboard V2", latest.getName());
+        assertEquals(8, latest.getStock());
+        assertEquals(1L, latest.getVersion());
     }
 }

@@ -1,0 +1,30 @@
+{{- if .Values.istio.enabled }}
+{{- range $name, $service := .Values.services }}
+{{- if $service.enabled }}
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ecommerce.serviceLabels" (dict "serviceName" $name "context" $) | nindent 4 }}
+spec:
+  host: {{ include "ecommerce.serviceName" (dict "serviceName" $name "context" $) }}.{{ $.Release.Namespace }}.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: {{ $.Values.istio.circuitBreaker.maxConnections | default 100 }}
+      http:
+        http1MaxPendingRequests: {{ $.Values.istio.circuitBreaker.maxConnections | default 100 }}
+        maxRequestsPerConnection: 10
+    outlierDetection:
+      consecutive5xxErrors: {{ $.Values.istio.circuitBreaker.consecutive5xxErrors | default 3 }}
+      interval: {{ $.Values.istio.circuitBreaker.interval | default "10s" }}
+      baseEjectionTime: {{ $.Values.istio.circuitBreaker.baseEjectionTime | default "30s" }}
+      maxEjectionPercent: {{ if and $.Values.istio $.Values.istio.circuitBreaker (hasKey $.Values.istio.circuitBreaker "maxEjectionPercent") }}{{ $.Values.istio.circuitBreaker.maxEjectionPercent }}{{ else }}50{{ end }}
+{{- end }}
+{{- end }}
+{{- end }}

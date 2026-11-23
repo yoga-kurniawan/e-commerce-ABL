@@ -21,7 +21,7 @@ dan Secret service terkait berisi key `username` serta `password`.
 Kredensial tidak ditulis ke manifest. PostgreSQL memakai image resmi
 [`postgres:17.11-bookworm`](https://github.com/docker-library/docs/blob/master/postgres/README.md).
 
-Ikuti [panduan tim](../../docs/panduan-deployment-tim.md) untuk membuat Secret
+Ikuti [panduan tim](../../docs/guides/panduan-deployment-tim.md) untuk membuat Secret
 sebelum database, lalu memasang aplikasi. Panduan tersebut juga mencatat bukti
 runtime. Berdasarkan output WSL pengguna pada 16 November 2026, database Product
 1/1 Running dan PVC Bound; startup, migrasi, serta POST/GET aplikasi Product
@@ -44,7 +44,9 @@ Hasil yang dituju: Pod `<service>-db-0` berstatus `1/1 Running`, PVC
 `data-<service>-db-0` berstatus `Bound`, serta Service `<service>-db` port 5432.
 Service memakai `clusterIP: None` (headless); ini sesuai rancangan StatefulSet.
 Database dan aplikasi berada di namespace `ecommerce`. Database tidak memakai
-sidecar karena template Pod menonaktifkan injeksi Istio.
+sidecar karena template Pod menonaktifkan injeksi Istio. Setiap instance PostgreSQL
+dikonfigurasi dengan parameter optimal Minikube (`shared_buffers=32MB`, `max_connections=30`, `work_mem=2MB`)
+dan alokasi resource hemat CPU (`requests.cpu: 50m`, `requests.memory: 128Mi`).
 NetworkPolicy membatasi ingress ke database dari Pod aplikasi terkait jika CNI mendukung
 penegakan NetworkPolicy. CNI kindnet bawaan Minikube tidak memberikan jaminan
 penegakan tersebut.

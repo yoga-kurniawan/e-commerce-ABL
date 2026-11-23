@@ -1,14 +1,19 @@
 package id.ac.ub.abl.order.adapter.outbound.database;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import id.ac.ub.abl.order.adapter.outbound.database.entity.OrderItemJpaEntity;
 import id.ac.ub.abl.order.adapter.outbound.database.entity.OrderJpaEntity;
 import id.ac.ub.abl.order.domain.OrderStatus;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
@@ -31,6 +36,7 @@ class OrdersRepositoryTest {
     }
 
     @Autowired OrdersRepository repository;
+    @Autowired EntityManagerFactory entityManagerFactory;
 
     @BeforeEach
     void clearDatabase() {
@@ -45,10 +51,46 @@ class OrdersRepositoryTest {
 
         OrderJpaEntity saved = repository.save(order);
 
-        OrderJpaEntity loaded = repository.findById(saved.getId()).orElseThrow();
+        OrderJpaEntity loaded = repository.findWithItemsById(saved.getId()).orElseThrow();
         assertEquals(2, loaded.getItems().size());
         assertEquals(1L, loaded.getItems().get(0).getProductId());
         assertEquals(2L, loaded.getItems().get(1).getProductId());
+    }
+
+    @Test
+    void findByCustomerIdOrderByIdDesc_avoidsNPlusOneSql() {
+        for (int i = 0; i < 5; i++) {
+            OrderJpaEntity order = new OrderJpaEntity(null, 101L, 10L + i, OrderStatus.PENDING, null);
+            order.addItem(new OrderItemJpaEntity(order, 1L, "Keyboard", 2, new BigDecimal("350000")));
+            order.addItem(new OrderItemJpaEntity(order, 2L, "Mouse", 1, new BigDecimal("150000")));
+            repository.saveAndFlush(order);
+        }
+
+        Statistics stats = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        stats.setStatisticsEnabled(true);
+        stats.clear();
+
+        List<OrderJpaEntity> orders = repository.findByCustomerIdOrderByIdDesc(101L);
+
+        assertEquals(5, orders.size());
+        orders.forEach(order -> assertEquals(2, order.getItems().size()));
+        assertEquals(1L, stats.getPrepareStatementCount());
+    }
+
+    @Test
+    void concurrentUpdate_throwsOptimisticLockingFailure() {
+        OrderJpaEntity order = new OrderJpaEntity(null, 101L, 10L, OrderStatus.PENDING, "Alamat Awal");
+        order.addItem(new OrderItemJpaEntity(order, 1L, "Keyboard", 1, new BigDecimal("350000")));
+        OrderJpaEntity saved = repository.saveAndFlush(order);
+
+        OrderJpaEntity first = repository.findWithItemsById(saved.getId()).orElseThrow();
+        OrderJpaEntity second = repository.findWithItemsById(saved.getId()).orElseThrow();
+
+        first.setShippingAddress("Alamat 1");
+        repository.saveAndFlush(first);
+
+        second.setShippingAddress("Alamat 2");
+        assertThrows(ObjectOptimisticLockingFailureException.class, () -> repository.saveAndFlush(second));
     }
 
     @Test
