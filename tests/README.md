@@ -7,6 +7,7 @@ Direktori ini berisi suite pengujian terpusat untuk memverifikasi helper deploym
 | Direktori / File | Cakupan | Ketergantungan Cluster |
 |---|---|---|
 | `tests/scripts/deploy-local-test.sh` | Regression test `scripts/deploy-local.sh` menggunakan command doubles | Tidak perlu cluster |
+| `tests/functional/api-v2-crud.sh` | Functional test CRUD API v2.0 (`GET, POST, PUT, PATCH, DELETE`) | Perlu cluster + Gateway `18080` |
 | `tests/integration/e2e-happy-path.sh` | Alur penuh `Product -> Cart -> Order -> Payment` | Perlu cluster + Gateway `18080` |
 | `tests/integration/e2e-negative-contracts.sh` | Validasi kontrak negatif, duplicate JSON key, idempotency, dan `404` | Perlu cluster + Gateway `18080` |
 | `tests/security/istio-mesh-security.sh` | Verifikasi mTLS `STRICT`, L7 `AuthorizationPolicy`, dan isolasi `/actuator/*` | Perlu Minikube + Istio + Gateway `18080` |
@@ -32,7 +33,10 @@ Direktori ini berisi suite pengujian terpusat untuk memverifikasi helper deploym
 # 1. Uji helper deployment (tanpa cluster)
 bash tests/scripts/deploy-local-test.sh
 
-# 2. Uji E2E happy path & negative contracts
+# 2. Functional test API v2.0 (GET, POST, PUT, PATCH, DELETE)
+bash tests/functional/api-v2-crud.sh
+
+# 3. Uji E2E happy path & negative contracts
 bash tests/integration/e2e-happy-path.sh
 bash tests/integration/e2e-negative-contracts.sh
 
