@@ -453,7 +453,7 @@ Perbarui catatan bukti runtime pada panduan ini berdasarkan output aktual. Bedak
 tersedia, lint/dry-run lolos, rollout Ready, API langsung berhasil, dan ingress
 berhasil. Deployment Ready tidak membuktikan seluruh jenis pengujian tersebut.
 Pengujian kebijakan mTLS/AuthorizationPolicy dan enforcement NetworkPolicy
-merupakan pekerjaan terpisah setelah alur dasar stabil. Chart Helm kini sudah membuat ServiceAccount khusus per aplikasi (`abl-<svc>-service-sa`)
+merupakan pekerjaan terpisah setelah alur dasar stabil. Chart Helm kini sudah membuat ServiceAccount khusus per aplikasi (`abl-<svc>-service`)
 dengan token automount dinonaktifkan, serta mengonfigurasi AuthorizationPolicy
 berbasis identitas workload mTLS antar-service. NetworkPolicy yang tersedia memerlukan
 CNI dengan dukungan enforcement dan pengujian akses diizinkan/ditolak.
