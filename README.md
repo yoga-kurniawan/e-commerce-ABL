@@ -461,7 +461,7 @@ Status pengembangan dan verifikasi:
 | Docker multi-stage build | 4 Dockerfile teruji dan dimuat ke image Minikube |
 | Database dan endpoint bisnis | Keempat service lulus tests PostgreSQL Testcontainers terisolasi & integrasi HTTP |
 | Cluster/deployment Minikube & Istio | Helm umbrella chart teruji di Minikube WSL2: mTLS `STRICT`, L7 RBAC, Outlier Detection CB, Gateway 18080 |
-| Tests bisnis, keamanan, dan pengujian beban | 119 tests Product, Cart V2, 309 tests Payment lulus; skenario cluster otomatis di `tests/` siap |
+| Tests bisnis, keamanan, dan pengujian beban | Total 778 tests Maven lulus (`Product`: 136, `Cart`: 108, `Order`: 141, `Payment`: 393); skenario cluster otomatis di `tests/` siap |
 
 ## Dokumentasi lanjutan
 

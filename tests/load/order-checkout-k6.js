@@ -16,18 +16,25 @@ export const options = {
 };
 
 export function setup() {
-  const payload = JSON.stringify({
-    name: 'K6 Load Test Product',
-    price: 150000,
-    stock: 100000,
-  });
-  const res = http.post(`${BASE_URL}/api/v1/products`, payload, {
-    headers: { 'Content-Type': 'application/json' },
-  });
-  check(res, {
-    'setup product created (201)': (r) => r.status === 201,
-  });
-  return { productId: res.json('id') };
+  const productIds = [];
+  for (let i = 1; i <= 3; i++) {
+    const payload = JSON.stringify({
+      name: `K6 Load Test Product ${i}`,
+      price: 150000,
+      stock: 100000,
+    });
+    const res = http.post(`${BASE_URL}/api/v1/products`, payload, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    check(res, {
+      'setup product created (201)': (r) => r.status === 201,
+    });
+    const id = res.json('id');
+    if (id) {
+      productIds.push(id);
+    }
+  }
+  return { productIds };
 }
 
 export default function (data) {
@@ -48,15 +55,17 @@ export default function (data) {
   });
 
   const cartId = cartRes.json('id');
-  if (cartId && data.productId) {
-    const itemRes = http.post(
-      `${BASE_URL}/api/v1/carts/${cartId}/items`,
-      JSON.stringify({ productId: data.productId, quantity: 1 }),
-      jsonHeaders
-    );
-    check(itemRes, {
-      'POST /api/v1/carts/{id}/items status 201': (r) => r.status === 201,
-    });
+  if (cartId && data.productIds && data.productIds.length > 0) {
+    for (const productId of data.productIds) {
+      const itemRes = http.post(
+        `${BASE_URL}/api/v1/carts/${cartId}/items`,
+        JSON.stringify({ productId, quantity: 1 }),
+        jsonHeaders
+      );
+      check(itemRes, {
+        'POST /api/v1/carts/{id}/items status 201': (r) => r.status === 201,
+      });
+    }
 
     const orderRes = http.post(
       `${BASE_URL}/api/v1/orders`,

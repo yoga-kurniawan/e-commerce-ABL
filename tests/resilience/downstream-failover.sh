@@ -29,7 +29,7 @@ fail() {
 
 # 1. Scale abl-cart-service to 0 replicas and wait for pods to terminate
 kctl -n "$NAMESPACE" scale deployment/abl-cart-service --replicas=0
-kctl -n "$NAMESPACE" wait --for=delete pod -l app.kubernetes.io/component=cart --timeout=90s || true
+kctl -n "$NAMESPACE" wait --for=delete pod -l app.kubernetes.io/name=cart-service --timeout=90s || true
 pass "Scaled abl-cart-service to 0 replicas"
 
 # 2. Verify POST /api/v1/orders fast-fails with 503

@@ -43,8 +43,10 @@ bash tests/security/istio-mesh-security.sh
 bash tests/resilience/zero-downtime-rollout.sh
 bash tests/resilience/downstream-failover.sh
 
-# 5. Uji beban dengan k6
+# 5. Uji beban dengan k6 (lokal atau via Docker)
 k6 run tests/load/order-checkout-k6.js
+# atau tanpa install k6 di host:
+docker run --rm -i --network=host grafana/k6 run - < tests/load/order-checkout-k6.js
 ```
 
 Variabel lingkungan opsional yang didukung:

@@ -47,26 +47,26 @@ if kctl -n default run "$non_mesh_pod" --image=curlimages/curl:8.10.1 --restart=
 fi
 pass "Non-mesh pod in default namespace rejected under PeerAuthentication STRICT"
 
-# 3. L7 AuthorizationPolicy checks from abl-cart-service pod
-cart_pod=$(kctl -n "$NAMESPACE" get pod -l app.kubernetes.io/component=cart -o jsonpath='{.items[0].metadata.name}')
-[[ -n "$cart_pod" ]] || fail "No running pod found for abl-cart-service"
+# 3. L7 AuthorizationPolicy checks using a temporary curl pod with abl-cart-service ServiceAccount
+cart_probe_pod="rbac-cart-probe-$$"
+rbac_codes=$(kctl -n "$NAMESPACE" run "$cart_probe_pod" --image=curlimages/curl:8.10.1 --restart=Never --rm -i --quiet \
+  --overrides='{"spec":{"serviceAccountName":"abl-cart-service"}}' -- \
+  sh -c "
+    c1=\$(curl -s -o /dev/null -w '%{http_code}' http://abl-product-service.${NAMESPACE}.svc.cluster.local:8080/api/v1/products)
+    c2=\$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{\"name\":\"Blocked\",\"price\":1000,\"stock\":1}' http://abl-product-service.${NAMESPACE}.svc.cluster.local:8080/api/v1/products)
+    c3=\$(curl -s -o /dev/null -w '%{http_code}' 'http://abl-payment-service.${NAMESPACE}.svc.cluster.local:8080/api/v2/payments?orderId=1')
+    printf '%s %s %s\n' \"\$c1\" \"\$c2\" \"\$c3\"
+  " | tr -d '\r' | tail -n1)
 
-get_product_code=$(kctl -n "$NAMESPACE" exec "$cart_pod" -c cart-service -- \
-  curl -sS -o /dev/null -w '%{http_code}' "http://abl-product-service.${NAMESPACE}.svc.cluster.local:8080/api/v1/products")
-[[ "$get_product_code" == "200" ]] || fail "Expected 200 for cart -> GET product, got $get_product_code"
+read -r get_product_code post_product_code get_payment_code <<<"$rbac_codes"
+[[ "$get_product_code" == "200" ]] || fail "Expected 200 for cart -> GET product, got '$get_product_code'"
 pass "L7 RBAC allows abl-cart-service GET /api/v1/products (HTTP 200)"
 
-post_product_code=$(kctl -n "$NAMESPACE" exec "$cart_pod" -c cart-service -- \
-  curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
-  -d '{"name":"Blocked","price":1000,"stock":1}' \
-  "http://abl-product-service.${NAMESPACE}.svc.cluster.local:8080/api/v1/products")
-[[ "$post_product_code" == "403" ]] || fail "Expected 403 for cart -> POST product, got $post_product_code"
+[[ "$post_product_code" == "403" ]] || fail "Expected 403 for cart -> POST product, got '$post_product_code'"
 pass "L7 RBAC denies abl-cart-service POST /api/v1/products (HTTP 403)"
 
-get_payment_code=$(kctl -n "$NAMESPACE" exec "$cart_pod" -c cart-service -- \
-  curl -sS -o /dev/null -w '%{http_code}' "http://abl-payment-service.${NAMESPACE}.svc.cluster.local:8080/api/v1/payments/1")
-[[ "$get_payment_code" == "403" ]] || fail "Expected 403 for cart -> GET payment, got $get_payment_code"
-pass "L7 RBAC denies abl-cart-service GET /api/v1/payments/1 (HTTP 403)"
+[[ "$get_payment_code" == "403" ]] || fail "Expected 403 for cart -> GET payment, got '$get_payment_code'"
+pass "L7 RBAC denies abl-cart-service GET /api/v2/payments?orderId=1 (HTTP 403)"
 
 # 4. /actuator/* isolation: 404 on Gateway 18080, 200 on management port 9090
 gw_actuator_code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE_URL/actuator/health")
