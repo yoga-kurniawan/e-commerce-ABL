@@ -1,89 +1,109 @@
 #!/usr/bin/env bash
-# Istio Service Mesh security verification:
-# 1. PeerAuthentication STRICT rejects plaintext requests from non-mesh pods.
-# 2. L7 AuthorizationPolicy enforces SPIFFE-based RBAC between services.
-# 3. /actuator/* is isolated from Ingress Gateway (404) and exposed on port 9090 (200).
+# Separate workload-identity enforcement from application JWT authorization.
 set -euo pipefail
-
+source "$(dirname -- "${BASH_SOURCE[0]}")/../lib/jwt.sh"
+jwt_init
 MINIKUBE_PROFILE="${MINIKUBE_PROFILE:-ecommerce-abl}"
 KUBE_CONTEXT="${KUBE_CONTEXT:-ecommerce-abl}"
 NAMESPACE="${NAMESPACE:-ecommerce}"
 BASE_URL="${BASE_URL:-http://127.0.0.1:18080}"
 passed=0
-pf_pid=""
-
+pf_pid=''
+non_mesh_pod="mtls-probe-$$"
+cart_probe_pod="rbac-cart-probe-$$"
+non_mesh_created=false
+cart_probe_created=false
+kctl() { minikube -p "$MINIKUBE_PROFILE" kubectl -- --context="$KUBE_CONTEXT" "$@"; }
 cleanup() {
-  if [[ -n "$pf_pid" ]] && kill -0 "$pf_pid" 2>/dev/null; then
-    kill "$pf_pid" 2>/dev/null || true
-    wait "$pf_pid" 2>/dev/null || true
-  fi
+  if [[ -n "$pf_pid" ]]; then kill "$pf_pid" 2>/dev/null || true; wait "$pf_pid" 2>/dev/null || true; fi
+  if [[ "$non_mesh_created" == true ]]; then kctl -n default delete pod "$non_mesh_pod" --wait=false >/dev/null 2>&1 || true; fi
+  if [[ "$cart_probe_created" == true ]]; then kctl -n "$NAMESPACE" delete pod "$cart_probe_pod" --wait=false >/dev/null 2>&1 || true; fi
+}
+pass() { ((passed+=1)); printf 'PASS: %s\n' "$1"; }
+fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
+
+jwt_preflight
+jwt_refresh admin
+pa_mode=$(kctl -n "$NAMESPACE" get peerauthentication -o jsonpath='{.items[0].spec.mtls.mode}')
+[[ "$pa_mode" == STRICT ]] || fail "Expected STRICT, got '$pa_mode'"
+pass 'PeerAuthentication is STRICT'
+# A pod startup/image failure must not count as a successful security denial.
+create_probe() {
+  local name=$1 namespace=$2 mesh=$3 account=$4
+  kctl -n "$namespace" apply -f - <<YAML
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $name
+  namespace: $namespace
+  labels:
+    sidecar.istio.io/inject: "$mesh"
+spec:
+  serviceAccountName: $account
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: curlimages/curl:8.10.1
+      command: [sleep, "600"]
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 64Mi}
+YAML
+}
+# Keep JWT out of pod manifests, kubectl command arguments and logs: pass only through stdin.
+probe() {
+  local namespace=$1 pod=$2 method=$3 url=$4 token=${5:-}
+  printf '%s\n' "$token" | kctl -n "$namespace" exec -i "$pod" -c probe -- sh -c '
+    IFS= read -r token
+    if [ -n "$token" ]; then
+      curl -sS --connect-timeout 5 --max-time 10 -w "\n%{http_code}" -X "$1" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -d "$3" "$2"
+    else
+      curl -sS --connect-timeout 5 --max-time 10 -w "\n%{http_code}" -X "$1" "$2"
+    fi
+  ' sh "$method" "$url" '{"name":"Mesh must deny this admin request","price":1000,"stock":1}'
 }
 trap cleanup EXIT
+create_probe "$non_mesh_pod" default false default
+non_mesh_created=true
+kctl -n default wait --for=condition=Ready "pod/$non_mesh_pod" --timeout=180s
+set +e
+non_mesh_result=$(probe default "$non_mesh_pod" GET "http://abl-product-service.$NAMESPACE.svc.cluster.local:8080/api/v1/products" "$ADMIN_TOKEN")
+non_mesh_exit=$?
+set -e
+[[ "$non_mesh_exit" != 0 && "${non_mesh_result##*$'\n'}" == 000 ]] || fail 'Expected transport rejection from non-mesh pod, not an application 401/403'
+pass 'Non-mesh traffic is blocked before application HTTP (consistent with STRICT/network isolation)'
 
-pass() {
-  ((passed += 1))
-  printf 'PASS: %s\n' "$1"
-}
+create_probe "$cart_probe_pod" "$NAMESPACE" true abl-cart-service
+cart_probe_created=true
+kctl -n "$NAMESPACE" wait --for=condition=Ready "pod/$cart_probe_pod" --timeout=180s
+jwt_refresh admin
+result=$(probe "$NAMESPACE" "$cart_probe_pod" GET "http://abl-product-service.$NAMESPACE.svc.cluster.local:8080/api/v1/products" "$ADMIN_TOKEN")
+[[ "${result##*$'\n'}" == 200 ]] || fail 'Mesh-allowed GET with valid JWT must return 200'
+pass 'Cart identity + valid JWT can GET Product'
+result=$(probe "$NAMESPACE" "$cart_probe_pod" GET "http://abl-product-service.$NAMESPACE.svc.cluster.local:8080/api/v1/products")
+[[ "${result##*$'\n'}" == 401 && "$result" == *UNAUTHORIZED* ]] || fail 'Mesh-allowed GET without JWT must be rejected by backend with 401'
+pass 'Workload identity alone does not replace a user JWT'
+for target in product payment; do
+  jwt_refresh admin
+  if [[ "$target" == product ]]; then method=POST; path=/api/v1/products; else method=GET; path='/api/v2/payments?orderId=1'; fi
+  # ADMIN could pass backend role/ownership checks; denial must come from Envoy RBAC.
+  result=$(probe "$NAMESPACE" "$cart_probe_pod" "$method" "http://abl-$target-service.$NAMESPACE.svc.cluster.local:8080$path" "$ADMIN_TOKEN")
+  [[ "${result##*$'\n'}" == 403 && "$result" == *'RBAC: access denied'* ]] || fail "Expected Envoy RBAC denial for Cart -> $method $target, not backend JWT denial"
+  pass "Istio RBAC blocks Cart -> $method $target despite valid ADMIN JWT"
+done
 
-fail() {
-  printf 'FAIL: %s\n' "$1" >&2
-  exit 1
-}
-
-kctl() {
-  minikube -p "$MINIKUBE_PROFILE" kubectl -- --context="$KUBE_CONTEXT" "$@"
-}
-
-# 1. Verify PeerAuthentication STRICT mode
-pa_mode=$(kctl -n "$NAMESPACE" get peerauthentication -o jsonpath='{.items[0].spec.mtls.mode}')
-[[ "$pa_mode" == "STRICT" ]] || fail "Expected PeerAuthentication STRICT, got '$pa_mode'"
-pass "PeerAuthentication mode in $NAMESPACE is STRICT"
-
-# 2. Non-mesh pod in 'default' namespace must be rejected by mTLS STRICT
-non_mesh_pod="mtls-probe-$$"
-if kctl -n default run "$non_mesh_pod" --image=curlimages/curl:8.10.1 --restart=Never --rm -i --quiet -- \
-  curl -sS --max-time 5 "http://abl-product-service.${NAMESPACE}.svc.cluster.local:8080/api/v1/products" >/dev/null 2>&1; then
-  fail "Non-mesh pod in default namespace was able to reach abl-product-service"
-fi
-pass "Non-mesh pod in default namespace rejected under PeerAuthentication STRICT"
-
-# 3. L7 AuthorizationPolicy checks using a temporary curl pod with abl-cart-service ServiceAccount
-cart_probe_pod="rbac-cart-probe-$$"
-rbac_codes=$(kctl -n "$NAMESPACE" run "$cart_probe_pod" --image=curlimages/curl:8.10.1 --restart=Never --rm -i --quiet \
-  --overrides='{"spec":{"serviceAccountName":"abl-cart-service"}}' -- \
-  sh -c "
-    c1=\$(curl -s -o /dev/null -w '%{http_code}' http://abl-product-service.${NAMESPACE}.svc.cluster.local:8080/api/v1/products)
-    c2=\$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{\"name\":\"Blocked\",\"price\":1000,\"stock\":1}' http://abl-product-service.${NAMESPACE}.svc.cluster.local:8080/api/v1/products)
-    c3=\$(curl -s -o /dev/null -w '%{http_code}' 'http://abl-payment-service.${NAMESPACE}.svc.cluster.local:8080/api/v2/payments?orderId=1')
-    printf '%s %s %s\n' \"\$c1\" \"\$c2\" \"\$c3\"
-  " | tr -d '\r' | tail -n1)
-
-read -r get_product_code post_product_code get_payment_code <<<"$rbac_codes"
-[[ "$get_product_code" == "200" ]] || fail "Expected 200 for cart -> GET product, got '$get_product_code'"
-pass "L7 RBAC allows abl-cart-service GET /api/v1/products (HTTP 200)"
-
-[[ "$post_product_code" == "403" ]] || fail "Expected 403 for cart -> POST product, got '$post_product_code'"
-pass "L7 RBAC denies abl-cart-service POST /api/v1/products (HTTP 403)"
-
-[[ "$get_payment_code" == "403" ]] || fail "Expected 403 for cart -> GET payment, got '$get_payment_code'"
-pass "L7 RBAC denies abl-cart-service GET /api/v2/payments?orderId=1 (HTTP 403)"
-
-# 4. /actuator/* isolation: 404 on Gateway 18080, 200 on management port 9090
-gw_actuator_code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE_URL/actuator/health")
-[[ "$gw_actuator_code" == "404" ]] || fail "Expected 404 for /actuator/health on gateway, got $gw_actuator_code"
-pass "Gateway 18080 blocks /actuator/health (HTTP 404)"
-
+code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CUSTOMER_TOKEN" "$BASE_URL/actuator/health")
+[[ "$code" == 404 ]] || fail "Gateway actuator isolation expected 404, got $code"
+pass 'Gateway does not expose actuator'
 kctl -n "$NAMESPACE" port-forward deployment/abl-product-service 19090:9090 >/dev/null 2>&1 &
 pf_pid=$!
 for _ in {1..15}; do
-  if curl -sS -o /dev/null http://127.0.0.1:19090/actuator/health/readiness 2>/dev/null; then
-    break
-  fi
+  kill -0 "$pf_pid" 2>/dev/null || fail 'Management port-forward failed'
+  code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:19090/actuator/health/readiness 2>/dev/null) || code=000
+  [[ "$code" != 200 ]] || break
   sleep 1
 done
-
-mgmt_code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:19090/actuator/health/readiness)
-[[ "$mgmt_code" == "200" ]] || fail "Expected 200 on management port 9090 readiness, got $mgmt_code"
-pass "Management port 9090 exposes /actuator/health/readiness (HTTP 200)"
-
+[[ "$code" == 200 ]] || fail 'Management readiness must remain accessible without JWT'
+pass 'Management readiness remains available to probes'
 printf 'All %d Istio mesh security assertions passed.\n' "$passed"
