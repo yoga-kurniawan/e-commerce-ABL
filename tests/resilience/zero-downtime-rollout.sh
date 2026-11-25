@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Zero-downtime rollout resilience test for abl-product-service.
 set -euo pipefail
+source "$(dirname -- "${BASH_SOURCE[0]}")/../lib/jwt.sh"
+jwt_init customer
 
 MINIKUBE_PROFILE="${MINIKUBE_PROFILE:-ecommerce-abl}"
 KUBE_CONTEXT="${KUBE_CONTEXT:-ecommerce-abl}"
@@ -20,9 +22,8 @@ cleanup() {
     wait "$probe_pid" 2>/dev/null || true
   fi
   rm -f -- "${probe_log:-}"
-  kctl -n "$NAMESPACE" scale deployment/abl-product-service --replicas=1 >/dev/null 2>&1 || true
+  kctl -n "$NAMESPACE" scale deployment/abl-product-service --replicas="$original_replicas" >/dev/null 2>&1 || true
 }
-trap cleanup EXIT
 
 pass() {
   ((passed += 1))
@@ -34,16 +35,23 @@ fail() {
   exit 1
 }
 
-# 1. Scale abl-product-service to 2 replicas
-kctl -n "$NAMESPACE" scale deployment/abl-product-service --replicas=2
+jwt_preflight
+original_replicas=$(kctl -n "$NAMESPACE" get deployment/abl-product-service -o jsonpath='{.spec.replicas}')
+[[ "$original_replicas" =~ ^[1-9][0-9]*$ ]] || fail "Deployment harus aktif sebelum fault test"
+trap cleanup EXIT
+
+# 1. Keep at least two replicas without reducing an existing larger deployment.
+rollout_replicas=$((original_replicas > 2 ? original_replicas : 2))
+kctl -n "$NAMESPACE" scale deployment/abl-product-service --replicas="$rollout_replicas"
 kctl -n "$NAMESPACE" rollout status deployment/abl-product-service --timeout=180s
-pass "Scaled abl-product-service to 2 ready replicas"
+pass "Prepared $rollout_replicas ready Product replicas"
 
 # 2. Start background HTTP probe against GET /api/v1/products
 probe_log=$(mktemp)
 (
   while true; do
-    code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE_URL/api/v1/products" || echo "000")
+    jwt_refresh customer || { printf 'AUTH_REFRESH_FAILED\n' >> "$probe_log"; exit 1; }
+    code=$(curl -sS -H "Authorization: Bearer $CUSTOMER_TOKEN" -o /dev/null -w '%{http_code}' "$BASE_URL/api/v1/products" || echo "000")
     printf '%s\n' "$code" >> "$probe_log"
     sleep 0.2
   done
@@ -66,9 +74,9 @@ non_200=$(grep -vc '^200$' "$probe_log" || true)
 [[ "$non_200" -eq 0 ]] || fail "Detected $non_200 non-200 responses out of $total_requests during rollout"
 pass "Zero downtime verified: $total_requests/ $total_requests requests returned HTTP 200"
 
-# 5. Scale back to 1 replica
-kctl -n "$NAMESPACE" scale deployment/abl-product-service --replicas=1
+# 5. Restore the original replica count.
+kctl -n "$NAMESPACE" scale deployment/abl-product-service --replicas="$original_replicas"
 kctl -n "$NAMESPACE" rollout status deployment/abl-product-service --timeout=120s
-pass "Scaled abl-product-service back to 1 replica"
+pass "Restored Product to $original_replicas replicas"
 
 printf 'All %d zero-downtime rollout assertions passed.\n' "$passed"

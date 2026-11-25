@@ -12,6 +12,7 @@ import id.ac.ub.abl.order.usecase.service.GetOrderUseCase;
 import id.ac.ub.abl.order.usecase.service.PatchOrderUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @RestController
@@ -32,6 +33,7 @@ public class OrdersApiController implements OrdersApi {
     }
 
     @Override
+    @PreAuthorize("@identity.matches(#input.customerId())")
     public ResponseEntity<OrderOutput> createOrder(OrderInput input) {
         Order order = createOrder.execute(mapper.toCreateCommand(input));
         URI location = UriComponentsBuilder.fromPath("/api/v1/orders/{orderId}")
@@ -40,11 +42,13 @@ public class OrdersApiController implements OrdersApi {
     }
 
     @Override
+    @PreAuthorize("@orderAccess.owner(#orderId)")
     public ResponseEntity<OrderOutput> getOrder(Long orderId) {
         return ResponseEntity.ok(mapper.toOutput(getOrder.execute(orderId)));
     }
 
     @Override
+    @PreAuthorize("@orderAccess.owner(#orderId)")
     public ResponseEntity<OrderOutput> updateOrder(Long orderId, OrderPatchInput input) {
         Order order = patchOrder.execute(mapper.toPatchCommand(orderId, input));
         return ResponseEntity.ok(mapper.toOutput(order));

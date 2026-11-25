@@ -1,0 +1,118 @@
+{
+  "realm": "ecommerce",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "accessTokenLifespan": 600,
+  "bruteForceProtected": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "ADMIN"
+      },
+      {
+        "name": "CUSTOMER"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "ecommerce-cli",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "ecommerce-api",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "customer-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "customer_id",
+            "claim.name": "customer_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "customer-a",
+      "enabled": true,
+      "realmRoles": [
+        "CUSTOMER"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${CUSTOMER_A_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "attributes": {
+        "customer_id": [
+          "101"
+        ]
+      },
+      "firstName": "Local",
+      "lastName": "customer-a",
+      "email": "customer-a@ecommerce.test",
+      "emailVerified": true
+    },
+    {
+      "username": "customer-b",
+      "enabled": true,
+      "realmRoles": [
+        "CUSTOMER"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${CUSTOMER_B_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "attributes": {
+        "customer_id": [
+          "202"
+        ]
+      },
+      "firstName": "Local",
+      "lastName": "customer-b",
+      "email": "customer-b@ecommerce.test",
+      "emailVerified": true
+    },
+    {
+      "username": "api-admin",
+      "enabled": true,
+      "realmRoles": [
+        "ADMIN"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${API_ADMIN_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "firstName": "Local",
+      "lastName": "api-admin",
+      "email": "api-admin@ecommerce.test",
+      "emailVerified": true
+    }
+  ]
+}

@@ -6,6 +6,8 @@ Struktur kode dirancang untuk memisahkan model domain, koordinator use case, ser
 
 **Product mendukung API V1 dan V2.** V2 menambahkan description, pencarian nama, paginasi opsional, serta X-Total-Count dengan kompatibilitas V1. Verifikasi Product pada 16 November 2026 lulus 119 tests, termasuk PostgreSQL dan upgrade migrasi. Lihat [panduan Product V2](docs/archive/product-service-v2.md) dan [hasil pengujian Product](docs/testing/product-service-testing.md). Kelulusan test Product tidak menyatakan seluruh service V2 atau deployment cluster terbaru telah diverifikasi.
 
+**JWT:** backend kini memvalidasi token Keycloak dan kepemilikan data V1/V2; perubahan Product membutuhkan role ADMIN. Lihat [panduan login, konfigurasi, dan pengujian JWT](docs/guides/jwt-authentication.md) sebelum menjalankan contoh curl tanpa token di bawah.
+
 ## Daftar isi
 
 - [Tech stack](#tech-stack)

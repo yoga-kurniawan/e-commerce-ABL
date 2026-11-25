@@ -19,9 +19,17 @@
     </properties>
 
     <modules>
+        <module>services/security-support</module>
         <module>services/product-service</module>
         <module>services/cart-service</module>
         <module>services/order-service</module>
         <module>services/payment-service</module>
     </modules>
+    <build><plugins><plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>
+        <configuration><environmentVariables>
+            <!-- Existing business tests stay isolated; JWT tests explicitly enable security. -->
+            <APP_SECURITY_ENABLED>false</APP_SECURITY_ENABLED>
+        </environmentVariables></configuration>
+    </plugin></plugins></build>
 </project>

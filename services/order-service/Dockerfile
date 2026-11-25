@@ -4,6 +4,7 @@ FROM eclipse-temurin:17-jdk-jammy AS build
 WORKDIR /workspace
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
+COPY services/security-support/pom.xml services/security-support/
 COPY services/product-service/pom.xml services/product-service/
 COPY services/cart-service/pom.xml services/cart-service/
 COPY services/order-service/pom.xml services/order-service/
@@ -12,6 +13,7 @@ COPY services/payment-service/pom.xml services/payment-service/
 RUN sed -i 's/\r$//' mvnw
 RUN --mount=type=cache,target=/root/.m2 sh mvnw -B -ntp -pl services/order-service -am dependency:go-offline
 
+COPY services/security-support/src services/security-support/src
 COPY services/order-service/src services/order-service/src
 # Jalankan tests terpisah dengan database/profile pengujian sebelum rilis.
 RUN --mount=type=cache,target=/root/.m2 sh mvnw -B -ntp -pl services/order-service -am -DskipTests package

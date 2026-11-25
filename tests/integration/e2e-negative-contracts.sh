@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Negative contract, validation, duplicate JSON key, and idempotency tests via Istio Gateway.
 set -euo pipefail
+source "$(dirname -- "${BASH_SOURCE[0]}")/../lib/jwt.sh"
+jwt_init
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:18080}"
 passed=0
+jwt_preflight
 
 pass() {
   ((passed += 1))
@@ -44,16 +47,18 @@ extract_id() {
 
 request() {
   local method="$1" url="$2" data="${3:-}" extra_header="${4:-}"
+  jwt_prepare "$method" "$url"
+  url=$JWT_URL
   local tmp_body status
   tmp_body=$(mktemp)
   if [[ -n "$data" && -n "$extra_header" ]]; then
-    status=$(curl -sS -o "$tmp_body" -w '%{http_code}' -X "$method" \
+    status=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" -o "$tmp_body" -w '%{http_code}' -X "$method" \
       -H 'Content-Type: application/json' -H "$extra_header" -d "$data" "$url")
   elif [[ -n "$data" ]]; then
-    status=$(curl -sS -o "$tmp_body" -w '%{http_code}' -X "$method" \
+    status=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" -o "$tmp_body" -w '%{http_code}' -X "$method" \
       -H 'Content-Type: application/json' -d "$data" "$url")
   else
-    status=$(curl -sS -o "$tmp_body" -w '%{http_code}' -X "$method" "$url")
+    status=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" -o "$tmp_body" -w '%{http_code}' -X "$method" "$url")
   fi
   RESP_BODY=$(cat "$tmp_body")
   RESP_STATUS="$status"
@@ -85,14 +90,14 @@ request POST "$BASE_URL/api/v1/products" '{"name":"Idempotency Fixture","price":
 assert_status 201 "$RESP_STATUS" "Fixture product created" "$RESP_BODY"
 product_id=$(extract_id "$RESP_BODY")
 
-request POST "$BASE_URL/api/v1/carts" '{"customerId":202}'
+request POST "$BASE_URL/api/v1/carts" "{\"customerId\":$CUSTOMER_ID}"
 assert_status 201 "$RESP_STATUS" "Fixture cart created" "$RESP_BODY"
 cart_id=$(extract_id "$RESP_BODY")
 
 request POST "$BASE_URL/api/v1/carts/$cart_id/items" "{\"productId\":$product_id,\"quantity\":1}"
 assert_status 201 "$RESP_STATUS" "Fixture item added to cart" "$RESP_BODY"
 
-request POST "$BASE_URL/api/v1/orders" "{\"cartId\":$cart_id,\"customerId\":202}"
+request POST "$BASE_URL/api/v1/orders" "{\"cartId\":$cart_id,\"customerId\":$CUSTOMER_ID}"
 assert_status 201 "$RESP_STATUS" "Fixture order created" "$RESP_BODY"
 order_id=$(extract_id "$RESP_BODY")
 

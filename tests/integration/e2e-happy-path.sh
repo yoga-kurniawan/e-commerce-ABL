@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # End-to-end happy path test: Product -> Cart -> Order -> Payment via Istio Gateway.
 set -euo pipefail
+source "$(dirname -- "${BASH_SOURCE[0]}")/../lib/jwt.sh"
+jwt_init
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:18080}"
 passed=0
+jwt_preflight
 
 pass() {
   ((passed += 1))
@@ -44,16 +47,18 @@ extract_id() {
 
 request() {
   local method="$1" url="$2" data="${3:-}" extra_header="${4:-}"
+  jwt_prepare "$method" "$url"
+  url=$JWT_URL
   local tmp_body status
   tmp_body=$(mktemp)
   if [[ -n "$data" && -n "$extra_header" ]]; then
-    status=$(curl -sS -o "$tmp_body" -w '%{http_code}' -X "$method" \
+    status=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" -o "$tmp_body" -w '%{http_code}' -X "$method" \
       -H 'Content-Type: application/json' -H "$extra_header" -d "$data" "$url")
   elif [[ -n "$data" ]]; then
-    status=$(curl -sS -o "$tmp_body" -w '%{http_code}' -X "$method" \
+    status=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" -o "$tmp_body" -w '%{http_code}' -X "$method" \
       -H 'Content-Type: application/json' -d "$data" "$url")
   else
-    status=$(curl -sS -o "$tmp_body" -w '%{http_code}' -X "$method" "$url")
+    status=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" -o "$tmp_body" -w '%{http_code}' -X "$method" "$url")
   fi
   RESP_BODY=$(cat "$tmp_body")
   RESP_STATUS="$status"
@@ -72,7 +77,7 @@ assert_status 200 "$RESP_STATUS" "GET /api/v1/products/$product_id returns produ
 assert_contains "$RESP_BODY" "E2E Mechanical Keyboard" "Product payload contains name"
 
 # 3. Create Cart
-request POST "$BASE_URL/api/v1/carts" '{"customerId":101}'
+request POST "$BASE_URL/api/v1/carts" "{\"customerId\":$CUSTOMER_ID}"
 assert_status 201 "$RESP_STATUS" "POST /api/v1/carts creates cart" "$RESP_BODY"
 cart_id=$(extract_id "$RESP_BODY")
 [[ -n "$cart_id" ]] || fail "Failed to extract cart_id from: $RESP_BODY"
@@ -87,7 +92,7 @@ assert_status 200 "$RESP_STATUS" "GET /api/v1/carts/$cart_id returns cart" "$RES
 assert_contains "$RESP_BODY" "700000" "Cart total matches 2 * 350000 = 700000"
 
 # 6. Create Order
-request POST "$BASE_URL/api/v1/orders" "{\"cartId\":$cart_id,\"customerId\":101}"
+request POST "$BASE_URL/api/v1/orders" "{\"cartId\":$cart_id,\"customerId\":$CUSTOMER_ID}"
 assert_status 201 "$RESP_STATUS" "POST /api/v1/orders creates order" "$RESP_BODY"
 order_id=$(extract_id "$RESP_BODY")
 [[ -n "$order_id" ]] || fail "Failed to extract order_id from: $RESP_BODY"

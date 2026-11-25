@@ -31,6 +31,8 @@
 		<api.version>2.0.0</api.version>
 	</properties>
 	<dependencies>
+        <dependency><groupId>id.ac.ub.abl</groupId><artifactId>security-support</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.springframework.security</groupId><artifactId>spring-security-test</artifactId><scope>test</scope></dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>

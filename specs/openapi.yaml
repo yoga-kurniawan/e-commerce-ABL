@@ -15,6 +15,10 @@ tags:
     description: 'Pengelolaan pesanan'
   - name: 'Payments'
     description: 'Pengelolaan pembayaran'
+# All business operations require a verified user JWT. Product writes require ADMIN;
+# customer resources require ownership, as documented in docs/guides/jwt-authentication.md.
+security:
+  - bearerAuth: []
 paths:
   /products:
     get:
@@ -24,6 +28,10 @@ paths:
       operationId: 'getProducts'
       description: 'Hanya mengembalikan produk aktif (DEC-011).'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Daftar produk berhasil diambil'
           content:
@@ -46,6 +54,10 @@ paths:
             schema:
               $ref: '#/components/schemas/ProductInput'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '201':
           description: 'Produk berhasil dibuat'
           content:
@@ -69,6 +81,10 @@ paths:
           schema:
             type: 'integer'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Detail produk berhasil diambil'
           content:
@@ -96,6 +112,10 @@ paths:
             schema:
               $ref: '#/components/schemas/ProductInput'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Produk berhasil diperbarui'
           content:
@@ -136,6 +156,10 @@ paths:
                   minimum: 0
               minProperties: 1
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Produk berhasil diperbarui'
           content:
@@ -159,6 +183,10 @@ paths:
           schema:
             type: 'integer'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '204':
           description: 'Produk berhasil dihapus'
         '404':
@@ -179,6 +207,10 @@ paths:
             schema:
               $ref: '#/components/schemas/CartInput'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '201':
           description: 'Keranjang kosong berhasil dibuat dengan ID dari backend'
           content:
@@ -205,6 +237,10 @@ paths:
           schema:
             type: 'integer'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Keranjang berhasil diambil'
           content:
@@ -233,6 +269,10 @@ paths:
             schema:
               $ref: '#/components/schemas/CartItemInput'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '201':
           description: 'Produk berhasil ditambahkan ke keranjang'
           content:
@@ -257,6 +297,10 @@ paths:
             schema:
               $ref: '#/components/schemas/OrderInput'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '201':
           description: 'Pesanan berhasil dibuat'
           content:
@@ -292,6 +336,10 @@ paths:
           schema:
             type: 'integer'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Detail pesanan berhasil diambil'
           content:
@@ -323,6 +371,10 @@ paths:
                   type: 'string'
               minProperties: 1
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Pesanan berhasil diperbarui'
           content:
@@ -364,6 +416,10 @@ paths:
             schema:
               $ref: '#/components/schemas/PaymentInput'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '201':
           description: 'Permintaan pembayaran berhasil dibuat, atau respons create pertama diputar ulang untuk key dan payload yang sama'
           content:
@@ -414,6 +470,10 @@ paths:
           schema:
             type: 'integer'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Status pembayaran berhasil diambil'
           content:
@@ -447,6 +507,10 @@ paths:
             schema:
               $ref: '#/components/schemas/PaymentReferencePatch'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Data pembayaran berhasil diperbarui'
           content:
@@ -497,6 +561,10 @@ paths:
                   type: 'integer'
                   minimum: 1
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Item keranjang berhasil diperbarui'
         '400':
@@ -533,6 +601,10 @@ paths:
                   minimum: 1
               minProperties: 1
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '200':
           description: 'Item keranjang berhasil diperbarui'
         '400':
@@ -558,11 +630,21 @@ paths:
           schema:
             type: 'integer'
       responses:
+        '401':
+          description: 'JWT tidak tersedia, invalid, atau kedaluwarsa.'
+        '403':
+          description: 'Role tidak diizinkan atau resource bukan milik customer dalam JWT.'
         '204':
           description: 'Item berhasil dihapus'
         '404':
           $ref: '#/components/responses/NotFound'
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'Keycloak RS256 JWT; audience ecommerce-api. CUSTOMER can access owned resources; Product writes require ADMIN.'
   schemas:
     Product:
       type: 'object'

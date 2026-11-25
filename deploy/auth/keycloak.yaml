@@ -1,0 +1,128 @@
+# Local development identity provider only: HTTP + embedded persistent database.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: identity
+  labels:
+    istio-injection: disabled
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ecommerce-idp
+  namespace: identity
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ecommerce-idp-data
+  namespace: identity
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecommerce-idp
+  namespace: identity
+spec:
+  selector:
+    app: ecommerce-idp
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-idp
+  namespace: identity
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ecommerce-idp
+  template:
+    metadata:
+      labels:
+        app: ecommerce-idp
+        sidecar.istio.io/inject: "false"
+    spec:
+      serviceAccountName: ecommerce-idp
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.8.2
+          args: [start-dev, --import-realm]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          envFrom:
+            - secretRef:
+                name: ecommerce-idp-credentials
+          env:
+            - name: KC_HOSTNAME
+              value: http://localhost:18090
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: JAVA_OPTS_KC_HEAP
+              value: -Xms64m -Xmx384m
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          volumeMounts:
+            - name: data
+              mountPath: /opt/keycloak/data
+            - name: realm
+              mountPath: /opt/keycloak/data/import/ecommerce-realm.json
+              subPath: realm.json
+              readOnly: true
+            - name: realm
+              mountPath: /opt/keycloak/data/config/user-profile.json
+              subPath: user-profile.json
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: ecommerce-idp-data
+        - name: realm
+          configMap:
+            name: ecommerce-idp-realm

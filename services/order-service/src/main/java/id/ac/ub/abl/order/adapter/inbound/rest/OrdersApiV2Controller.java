@@ -15,6 +15,7 @@ import id.ac.ub.abl.order.usecase.service.ListOrdersUseCase;
 import id.ac.ub.abl.order.usecase.service.PatchOrderUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @RestController
@@ -41,6 +42,7 @@ public class OrdersApiV2Controller implements OrdersApiV2 {
     }
 
     @Override
+    @PreAuthorize("@identity.matches(#input.customerId())")
     public ResponseEntity<OrderOutputV2> createOrder(OrderInput input) {
         Order order = createOrder.execute(mapper.toCreateCommand(input));
         URI location = UriComponentsBuilder.fromPath("/api/v2/orders/{orderId}")
@@ -49,22 +51,26 @@ public class OrdersApiV2Controller implements OrdersApiV2 {
     }
 
     @Override
+    @PreAuthorize("@orderAccess.owner(#orderId)")
     public ResponseEntity<OrderOutputV2> getOrder(Long orderId) {
         return ResponseEntity.ok(mapper.toOutputV2(getOrder.execute(orderId)));
     }
 
     @Override
+    @PreAuthorize("@orderAccess.owner(#orderId)")
     public ResponseEntity<OrderOutputV2> updateOrder(Long orderId, OrderPatchInput input) {
         Order order = patchOrder.execute(mapper.toPatchCommand(orderId, input));
         return ResponseEntity.ok(mapper.toOutputV2(order));
     }
 
     @Override
+    @PreAuthorize("@orderAccess.owner(#orderId)")
     public ResponseEntity<OrderOutputV2> cancelOrder(Long orderId) {
         return ResponseEntity.ok(mapper.toOutputV2(cancelOrder.execute(orderId)));
     }
 
     @Override
+    @PreAuthorize("@identity.matches(#customerId)")
     public ResponseEntity<List<OrderOutputV2>> listOrders(Long customerId) {
         return ResponseEntity.ok(listOrders.execute(customerId).stream().map(mapper::toOutputV2).toList());
     }

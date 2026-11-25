@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Functional API v2.0 tests covering GET, POST, PUT, PATCH, and DELETE across all 4 services via Istio Gateway.
 set -euo pipefail
+source "$(dirname -- "${BASH_SOURCE[0]}")/../lib/jwt.sh"
+jwt_init
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:18080}"
 passed=0
+jwt_preflight
 
 pass() {
   ((passed += 1))
@@ -44,17 +47,19 @@ extract_id() {
 
 request() {
   local method="$1" url="$2" data="${3:-}" extra_header="${4:-}"
+  jwt_prepare "$method" "$url"
+  url=$JWT_URL
   local tmp_body tmp_headers status
   tmp_body=$(mktemp)
   tmp_headers=$(mktemp)
   if [[ -n "$data" && -n "$extra_header" ]]; then
-    status=$(curl -sS -D "$tmp_headers" -o "$tmp_body" -w '%{http_code}' -X "$method" \
+    status=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" -D "$tmp_headers" -o "$tmp_body" -w '%{http_code}' -X "$method" \
       -H 'Content-Type: application/json' -H "$extra_header" -d "$data" "$url")
   elif [[ -n "$data" ]]; then
-    status=$(curl -sS -D "$tmp_headers" -o "$tmp_body" -w '%{http_code}' -X "$method" \
+    status=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" -D "$tmp_headers" -o "$tmp_body" -w '%{http_code}' -X "$method" \
       -H 'Content-Type: application/json' -d "$data" "$url")
   else
-    status=$(curl -sS -D "$tmp_headers" -o "$tmp_body" -w '%{http_code}' -X "$method" "$url")
+    status=$(curl -sS -H "Authorization: Bearer $JWT_TOKEN" -D "$tmp_headers" -o "$tmp_body" -w '%{http_code}' -X "$method" "$url")
   fi
   RESP_BODY=$(cat "$tmp_body")
   RESP_HEADERS=$(cat "$tmp_headers")
@@ -63,7 +68,7 @@ request() {
 }
 
 tag="v2-$(date +%s)-$$"
-customer_id=$((2000 + ($$ % 5000)))
+customer_id=$CUSTOMER_ID
 
 # ==============================================================================
 # 1. PRODUCT SERVICE v2 (POST, GET list/filter/detail, PUT, PATCH, DELETE)
@@ -76,7 +81,7 @@ assert_contains "$RESP_BODY" "Wireless v2" "Product v2 response includes descrip
 
 request GET "$BASE_URL/api/v2/products?name=$tag&page=0&size=5"
 assert_status 200 "$RESP_STATUS" "GET /api/v2/products with name filter & pagination" "$RESP_BODY"
-assert_contains "$RESP_HEADERS" "x-total-count:" "GET /api/v2/products returns X-Total-Count header"
+assert_contains "${RESP_HEADERS,,}" "x-total-count:" "GET /api/v2/products returns X-Total-Count header"
 
 request GET "$BASE_URL/api/v2/products/$product_id"
 assert_status 200 "$RESP_STATUS" "GET /api/v2/products/$product_id detail" "$RESP_BODY"

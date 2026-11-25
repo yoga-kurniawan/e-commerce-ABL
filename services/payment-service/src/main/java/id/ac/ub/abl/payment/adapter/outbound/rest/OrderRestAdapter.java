@@ -31,6 +31,7 @@ public class OrderRestAdapter implements OrderLookup {
         } catch (org.springframework.http.InvalidMediaTypeException error) {
             throw new PaymentOperationException("ORDER_UPSTREAM_ERROR", "Content type Order tidak valid", error);
         } catch (RestClientResponseException error) {
+            if (error.getStatusCode().value() == 403) { throw new org.springframework.security.access.AccessDeniedException("Order bukan milik pengguna", error); }
             if (error.getStatusCode().value() == 404) { return Optional.empty(); }
             throw new PaymentOperationException("ORDER_UPSTREAM_ERROR", "Order Service mengembalikan respons gagal", error);
         } catch (ResourceAccessException error) {

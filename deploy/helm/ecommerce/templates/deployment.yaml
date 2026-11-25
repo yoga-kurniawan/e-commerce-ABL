@@ -73,6 +73,14 @@ spec:
               containerPort: {{ $.Values.management.port }}
               protocol: TCP
           env:
+            - name: APP_SECURITY_ENABLED
+              value: {{ $.Values.auth.enabled | quote }}
+            - name: APP_SECURITY_ISSUER
+              value: {{ $.Values.auth.issuer | quote }}
+            - name: APP_SECURITY_JWK_SET_URI
+              value: {{ $.Values.auth.jwkSetUri | quote }}
+            - name: APP_SECURITY_AUDIENCE
+              value: {{ $.Values.auth.audience | quote }}
             - name: SERVER_PORT
               value: {{ $.Values.service.port | quote }}
             - name: MANAGEMENT_SERVER_PORT
