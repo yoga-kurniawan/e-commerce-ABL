@@ -34,6 +34,8 @@ public class CartRestAdapter implements CartLookup {
             response = client.getById(cartId);
         } catch (HttpClientErrorException.NotFound ex) {
             return Optional.empty();
+        } catch (HttpClientErrorException.Forbidden ex) {
+            throw new org.springframework.security.access.AccessDeniedException("Cart bukan milik pengguna", ex);
         } catch (RestClientException ex) {
             LOG.error("Gagal menghubungi Cart Service untuk cartId: {}", cartId, ex);
             throw new CartServiceUnavailableException("Gagal menghubungi Cart Service", ex);

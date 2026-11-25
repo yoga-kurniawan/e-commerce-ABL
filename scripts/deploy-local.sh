@@ -42,6 +42,7 @@ Existing Secret is reused. New Secret uses .secrets/<service>-db.env if present,
 otherwise a random password is generated for a new database. No secret rotation.
 up builds every enabled application with a unique tag; --skip-build reuses images;
 --only=<service> builds only one specified service from the stage.
+JWT-protected check requires AUTH_TOKEN (use an ADMIN token for all-service checks).
 No cluster/PVC deletion or automatic rollback. Local development only.
 EOF
 }
@@ -176,6 +177,8 @@ deploy_stage() {
 check_gateway() {
   local port='' attempt status
   local -a paths=(/api/v1/products /api/v2/products)
+  local -a auth_args=()
+  [[ -z ${AUTH_TOKEN:-} ]] || auth_args=(-H "Authorization: Bearer $AUTH_TOKEN")
   need curl
   cluster_ready
   local deployments
@@ -198,7 +201,7 @@ check_gateway() {
   [[ -n "$port" ]] || die 'Timeout menunggu port-forward gateway.'
   for path in "${paths[@]}"; do
     status=$(curl --fail --show-error --silent --connect-timeout 5 --max-time 20 \
-      --output "$work_dir/response.json" --write-out '%{http_code}' "http://127.0.0.1:$port$path")
+      "${auth_args[@]}" --output "$work_dir/response.json" --write-out '%{http_code}' "http://127.0.0.1:$port$path")
     [[ "$status" == 200 ]] || die "GET $path: HTTP $status, diharapkan 200."
     cat "$work_dir/response.json"
     printf '\nGET %s via gateway: berhasil\n' "$path"

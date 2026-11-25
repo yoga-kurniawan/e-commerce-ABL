@@ -77,9 +77,14 @@ class OrderRestAdapterTest {
         reply(404, "application/json", "{\"code\":\"NOT_FOUND\",\"message\":\"missing\"}");
         assertThat(adapter.findById(501L)).isEmpty();
     }
-    @ParameterizedTest @ValueSource(ints = {400, 401, 403, 409, 429, 500, 502, 503, 504})
+    @ParameterizedTest @ValueSource(ints = {400, 401, 409, 429, 500, 502, 503, 504})
     void lookup_whenRemoteError_shouldNeverTreatItAsMissing(int status) {
         reply(status, "application/json", "{}"); assertCode("ORDER_UPSTREAM_ERROR");
+    }
+    @Test void lookup_whenOrderOwnedBySomeoneElse_shouldPropagateForbidden() {
+        reply(403, "application/json", "{}");
+        assertThatThrownBy(() -> adapter.findById(501L))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     }
     @ParameterizedTest @ValueSource(strings = {
             "", "not json", "null", "[]", "{}", "{\"id\":502,\"total\":1,\"status\":\"PENDING\"}",

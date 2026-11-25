@@ -119,3 +119,10 @@ services:
       port: 5432
       name: payment_db
       existingSecret: payment-db-credentials
+
+# Every backend verifies JWT; no gateway-only trust or caller-supplied identity headers.
+auth:
+  enabled: true
+  issuer: http://localhost:18090/realms/ecommerce
+  jwkSetUri: http://ecommerce-idp.identity.svc.cluster.local:8080/realms/ecommerce/protocol/openid-connect/certs
+  audience: ecommerce-api

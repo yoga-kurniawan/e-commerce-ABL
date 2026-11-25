@@ -93,6 +93,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return super.handleExceptionInternal(exception, new ApiError(code, message), outputHeaders, status, request);
     }
 
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ApiError> accessDenied(org.springframework.security.access.AccessDeniedException exception) {
+        return ResponseEntity.status(403).body(new ApiError("FORBIDDEN", "Akses tidak diizinkan"));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> unexpected(Exception exception) {
         // Message, cause, request body dan header dapat memuat token. Catat tipe saja.

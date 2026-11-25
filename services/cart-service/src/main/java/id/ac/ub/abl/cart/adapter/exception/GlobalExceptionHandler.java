@@ -96,6 +96,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return super.handleExceptionInternal(exception, new ApiError(code, message), headers, status, request);
     }
 
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ApiError> accessDenied(org.springframework.security.access.AccessDeniedException exception) {
+        return ResponseEntity.status(403).body(new ApiError("FORBIDDEN", "Akses tidak diizinkan"));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> unexpectedException(Exception exception) {
         LOG.error("Kesalahan internal saat memproses request", exception);

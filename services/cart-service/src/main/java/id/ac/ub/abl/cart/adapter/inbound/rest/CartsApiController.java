@@ -19,6 +19,7 @@ import id.ac.ub.abl.cart.usecase.service.PatchCartItemUseCase;
 import id.ac.ub.abl.cart.usecase.service.ReplaceCartItemUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @RestController
@@ -48,6 +49,7 @@ public class CartsApiController implements CartsApi {
     }
 
     @Override
+    @PreAuthorize("@identity.matches(#input.customerId())")
     public ResponseEntity<CartOutput> createCart(CartInput input) {
         Cart cart = createCart.execute(mapper.toCreateCommand(input));
         URI location = UriComponentsBuilder.fromPath("/api/v1/carts/{cartId}")
@@ -56,12 +58,14 @@ public class CartsApiController implements CartsApi {
     }
 
     @Override
+    @PreAuthorize("@cartAccess.owner(#cartId)")
     public ResponseEntity<CartOutput> getCart(Long cartId) {
         Cart cart = getCart.execute(cartId);
         return ResponseEntity.ok(mapper.toOutput(cart));
     }
 
     @Override
+    @PreAuthorize("@cartAccess.owner(#cartId)")
     public ResponseEntity<CartOutput> addItem(Long cartId, CartItemInput input) {
         Cart cart = addCartItem.execute(mapper.toAddCommand(cartId, input));
         URI location = UriComponentsBuilder.fromPath("/api/v1/carts/{cartId}/items/{productId}")
@@ -70,6 +74,7 @@ public class CartsApiController implements CartsApi {
     }
 
     @Override
+    @PreAuthorize("@cartAccess.owner(#cartId)")
     public ResponseEntity<UpdatedCartItemOutput> replaceItem(Long cartId, Long productId, CartItemQuantityInput input) {
         Cart cart = replaceCartItem.execute(mapper.toReplaceCommand(cartId, productId, input));
         CartItem item = cart.findItem(productId).orElseThrow();
@@ -77,6 +82,7 @@ public class CartsApiController implements CartsApi {
     }
 
     @Override
+    @PreAuthorize("@cartAccess.owner(#cartId)")
     public ResponseEntity<UpdatedCartItemOutput> updateItem(Long cartId, Long productId, CartItemPatchInput input) {
         Cart cart = patchCartItem.execute(mapper.toPatchCommand(cartId, productId, input));
         CartItem item = cart.findItem(productId).orElseThrow();
@@ -84,6 +90,7 @@ public class CartsApiController implements CartsApi {
     }
 
     @Override
+    @PreAuthorize("@cartAccess.owner(#cartId)")
     public ResponseEntity<Void> deleteItem(Long cartId, Long productId) {
         deleteCartItem.execute(cartId, productId);
         return ResponseEntity.noContent().build();

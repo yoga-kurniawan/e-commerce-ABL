@@ -39,6 +39,8 @@ done
 printf -v client_config '{"clients":{"product-url":"http://127.0.0.1:%s","cart-url":"http://127.0.0.1:%s","order-url":"http://127.0.0.1:%s","payment-url":"http://127.0.0.1:%s"}}' \
   "$PRODUCT_SERVICE_PORT" "$CART_SERVICE_PORT" "$ORDER_SERVICE_PORT" "$PAYMENT_SERVICE_PORT"
 cd "$ROOT"
+# Build the selected application and its shared security dependency in one reactor.
+bash "$ROOT/mvnw" -pl "services/$service-service" -am -DskipTests package
 exec env \
   SERVER_PORT="${!port_key}" \
   SPRING_DATASOURCE_URL="jdbc:postgresql://${DB_HOST:-127.0.0.1}:${!db_port_key}/${!db_name_key}" \
@@ -48,4 +50,4 @@ exec env \
   SPRING_JPA_OPEN_IN_VIEW=false \
   SPRING_FLYWAY_ENABLED=true \
   SPRING_APPLICATION_JSON="$client_config" \
-  bash "$ROOT/mvnw" -pl "services/$service-service" spring-boot:run
+  java -jar "$ROOT/services/$service-service/target/$service-service-0.2.0-SNAPSHOT.jar"
