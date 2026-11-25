@@ -114,3 +114,20 @@ Helper `run-local-service.sh` membangun JAR beserta modul security-support sebel
 menjalankan aplikasi. Untuk pemanggilan Maven `spring-boot:run` secara manual pada
 satu modul saja, install parent/library dahulu:
 `./mvnw -pl services/security-support -am -DskipTests install`.
+
+## Uji manual dengan database terisolasi
+
+Jalankan `bash scripts/auth-local.sh gateway` pada terminal pertama. Pada terminal
+kedua: `python3 tests/security/jwt-e2e.py --manual`. Tunggu `MANUAL READY`;
+empat backend tetap menyala dengan JWT aktif dan database uji kosong. Gunakan
+terminal ketiga untuk login dan curl ke Product 19081, Cart 19082, Order 19083,
+Payment 19084 pada 127.0.0.1. Request langsung ke backend ini menguji autentikasi
+dan otorisasi aplikasi; pengujian ingress/mTLS Istio terpisah.
+
+Tanpa token, GET `http://127.0.0.1:19081/api/v2/products` menghasilkan 401.
+Set `TOKEN_A=$(python3 scripts/auth-token.py customer-a)`, lalu ulangi dengan
+header `Authorization: Bearer $TOKEN_A`: 200 dengan array kosong. Gunakan admin
+untuk membuat Product dan customer-a untuk membuat Cart customerId 101.
+Customer-b tidak boleh mengakses Cart tersebut. Token berumur 10 menit; login
+ulang jika kedaluwarsa. Ctrl+C pada terminal kedua menghentikan backend dan
+menghapus database sementara beserta seluruh data uji manual.

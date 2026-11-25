@@ -3,6 +3,7 @@
 Requires auth-local up + gateway, Docker, Java and freshly built Maven JARs.
 Never modifies Minikube business databases. Temporary processes/container are removed.
 """
+import argparse
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,10 @@ import subprocess
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--manual', action='store_true', help='Keep isolated backends running for manual curl/Postman tests; Ctrl+C cleans up.')
+args = parser.parse_args()
 
 ROOT = Path(__file__).resolve().parents[2]
 NAMES = ['product', 'cart', 'order', 'payment']
@@ -70,6 +75,12 @@ try:
         jar=ROOT/f'services/{name}-service/target/{name}-service-0.2.0-SNAPSHOT.jar'
         processes.append(subprocess.Popen(['java','-Xmx384m','-jar',str(jar)],env=env,stdout=log,stderr=subprocess.STDOUT))
     for i,p in enumerate(processes): wait_ready(f'http://127.0.0.1:{19181+i}/actuator/health/readiness',p)
+    if args.manual:
+        print('MANUAL READY — database uji kosong; deployment Minikube tidak diubah.', flush=True)
+        for name in NAMES: print(f'{name}: {BASE[name]}', flush=True)
+        print('Login di terminal lain: TOKEN_A=$(python3 scripts/auth-token.py customer-a)', flush=True)
+        print('Ctrl+C untuk menghentikan backend dan menghapus database uji.', flush=True)
+        while True: time.sleep(1)
     for version in ['v1','v2']:
         prefix='/api/'+version
         request('product','GET',prefix+'/products',401)
@@ -105,6 +116,8 @@ try:
             request('cart','DELETE',prefix+f'/carts/{c}/items',403,b)
         request('cart','GET',prefix+f'/carts/{c}',200,a)
     print(f'PASS: {checks} HTTP assertions using real Keycloak JWTs and all four services; isolated databases cleaned up.')
+except KeyboardInterrupt:
+    print('Menghentikan backend dan membersihkan database uji...', flush=True)
 finally:
     for p in processes:
         p.terminate()
