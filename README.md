@@ -1,12 +1,12 @@
 # E-Commerce Microservices ABL
 
-Backend e-commerce untuk project mata kuliah **Arsitektur Berbasis Layanan**, kelompok *dus bit gut genung*. Sistem dirancang sebagai empat aplikasi terpisah: **Product, Cart, Order, dan Payment**.
+Backend e-commerce untuk project mata kuliah **Arsitektur Berbasis Layanan**, kelompok *dus bit gut genung*. Sistem dirancang sebagai empat aplikasi terpisah: **Product, Cart, Order, dan Payment**, dilengkapi modul keamanan bersama (`security-support`).
 
-Struktur kode dirancang untuk memisahkan model domain, koordinator use case, serta adapter HTTP dan database. Kontrak API menjadi acuan implementasi dan pengujian setiap service.
+Struktur kode menerapkan *Hexagonal Architecture* (memisahkan model domain, koordinator use case, serta adapter HTTP dan database). Keempat service mendukung **API v1.0 dan v2.0** dengan kompatibilitas mundur, database PostgreSQL 17 + Flyway terpisah per service, pengamanan **JWT RS256 (Keycloak)**, serta orkestrasi **Kubernetes (Minikube) + Helm + Istio Service Mesh**.
 
-**Product mendukung API V1 dan V2.** V2 menambahkan description, pencarian nama, paginasi opsional, serta X-Total-Count dengan kompatibilitas V1. Verifikasi Product pada 16 November 2026 lulus 119 tests, termasuk PostgreSQL dan upgrade migrasi. Lihat [panduan Product V2](docs/archive/product-service-v2.md) dan [hasil pengujian Product](docs/testing/product-service-testing.md). Kelulusan test Product tidak menyatakan seluruh service V2 atau deployment cluster terbaru telah diverifikasi.
-
-**JWT:** backend kini memvalidasi token Keycloak dan kepemilikan data V1/V2; perubahan Product membutuhkan role ADMIN. Lihat [panduan login, konfigurasi, dan pengujian JWT](docs/guides/jwt-authentication.md) sebelum menjalankan contoh curl tanpa token di bawah.
+- Panduan deployment Minikube & Istio: [deploy/README.md](deploy/README.md)
+- Panduan autentikasi JWT & Keycloak: [docs/guides/jwt-authentication.md](docs/guides/jwt-authentication.md)
+- Panduan pengujian otomatis: [tests/README.md](tests/README.md)
 
 ## Daftar isi
 
@@ -15,6 +15,7 @@ Struktur kode dirancang untuk memisahkan model domain, koordinator use case, ser
 - [Database per service](#database-per-service)
 - [Konsep integrasi](#konsep-integrasi)
 - [Struktur project](#struktur-project)
+- [Quick start Minikube + Istio + Keycloak](#quick-start-minikube--istio--keycloak)
 - [Persiapan development](#persiapan-development)
 - [Menjalankan infrastruktur lokal](#menjalankan-infrastruktur-lokal)
 - [Memeriksa database](#memeriksa-database)
@@ -24,25 +25,26 @@ Struktur kode dirancang untuk memisahkan model domain, koordinator use case, ser
 - [Flow pengujian perubahan data](#flow-pengujian-perubahan-data)
 - [Flow pengujian gagal](#flow-pengujian-gagal)
 - [Pengujian dan bukti demo](#pengujian-dan-bukti-demo)
-- [Status dan pekerjaan berikutnya](#status-dan-pekerjaan-berikutnya)
+- [Status implementasi dan verifikasi](#status-implementasi-dan-verifikasi)
 - [Dokumentasi lanjutan](#dokumentasi-lanjutan)
 
 ## Tech stack
 
 | Kategori | Teknologi | Status/dasar |
 |---|---|---|
-| Backend | Java 17, Spring Boot 4.1.2 | Keempat service (Product, Cart, Order, Payment) terimplementasi penuh |
-| API | REST, JSON, URL path versioning `/api/v1` dan `/api/v2` | Product, Cart, Order, Payment V1 & V2 tersedia dan terverifikasi |
-| Dokumentasi API | OpenAPI 3.0.3, API versi 1.0.0 dan 2.0.0 | Spesifikasi API (DEC-020) & simulator OpenAPI |
+| Backend | Java 17, Spring Boot 4.1.2 | Keempat service (Product, Cart, Order, Payment) + `security-support` terimplementasi penuh |
+| API | REST, JSON, URL path versioning `/api/v1` dan `/api/v2` | Product, Cart, Order, Payment v1 & v2 tersedia dan terverifikasi |
+| Dokumentasi API | OpenAPI 3.0.3, API versi 1.0.0 dan 2.0.0 | Kontrak pada `specs/openapi.yaml` dan `specs/openapi-v2.yaml` |
 | Arsitektur internal | Domain, use case, ports/adapters (Hexagonal) | Terimplementasi penuh pada keempat service |
+| Keamanan & Auth | Keycloak, Spring Security OAuth2 Resource Server (JWT RS256), Istio mTLS `STRICT` & L7 RBAC | Validasi token, role `ADMIN`/`CUSTOMER`, kepemilikan `customer_id`, dan token relay aktif |
 | Database | PostgreSQL 17, database terpisah per service | Teruji dengan Testcontainers & StatefulSet Minikube |
-| Persistence | Spring Data JPA/Hibernate dan Flyway | Migrasi Flyway V1/V2/V3 & entity JPA tervalidasi |
-| Build | Maven multi-module dan Maven Wrapper | Multi-module build dan test-compile per service |
+| Persistence | Spring Data JPA/Hibernate dan Flyway | Migrasi Flyway & entity JPA tervalidasi |
+| Build | Maven multi-module dan Maven Wrapper | Multi-module build (`./mvnw -B -ntp verify`) |
 | Container | Docker Linux containers (multi-stage build) | 4 Dockerfile teruji dan termuat ke Minikube |
-| Deployment | Kubernetes/Minikube, Istio, Helm | Helm umbrella chart teruji di Minikube WSL2: mTLS STRICT, L7 RBAC, CB |
-| Pengujian HTTP/beban | curl, bash automated suite (`tests/`), k6 | Skenario otomasi cluster & integrasi teruji di Minikube WSL2 |
+| Deployment | Kubernetes/Minikube, Istio, Helm | Helm umbrella chart teruji di Minikube WSL2: mTLS `STRICT`, L7 RBAC, Outlier Detection CB |
+| Pengujian HTTP/beban | `curl`, bash/python automated suite (`tests/`), Grafana `k6` | Functional, Integration E2E, Security Mesh & JWT, Resilience, Load, Regression |
 
-Autentikasi JWT, role ADMIN/USER, Kafka, DLQ, shipping, dan notification berada di luar cakupan kontrak empat service saat ini. Penambahannya memerlukan desain dan kontrak tersendiri.
+Fitur asynchronous eventing (Kafka, DLQ), shipping, dan notification berada di luar cakupan implementasi saat ini.
 
 ## Daftar service
 
@@ -56,15 +58,13 @@ Port berikut merupakan konfigurasi **development langsung pada host**, bukan sta
 | `payment-service` | 8084 | `payment_db` | Membuat/membaca permintaan pembayaran dan mengubah metadata yang diizinkan | 3 | 4 |
 | **Total** | | | **v1: 10 path, v2: 11 path** | **18** | **22** |
 
-Kontrak diperluas dari baseline 17 operasi pada 9 path melalui keputusan OPEN-001: POST `/api/v1/carts` membuat Cart kosong dengan ID dari backend. Penambahan kontrak belum membuktikan endpoint sudah diimplementasikan.
+Versi 2.0.0 (DEC-020–DEC-023) bersifat *backward-compatible*: seluruh operasi v1 tetap tersedia di `/api/v2` dengan makna yang sama, ditambah field baru dan empat operasi baru (`GET /orders?customerId=`, `GET /payments?orderId=`, `DELETE /carts/{cartId}/items`, dan `POST /orders/{orderId}/cancel`). `GET /products` mendukung query parameter opsional `name`, `page`, `size` serta header `X-Total-Count`. `/api/v1` tetap didukung penuh pada keempat service.
 
-Versi 2.0.0 (DEC-020–DEC-023) bersifat backward-compatible: seluruh operasi v1 tetap ada di `/api/v2` dengan arti yang sama, ditambah field opsional/baru dan empat operasi baru, yaitu GET `/orders?customerId=`, GET `/payments?orderId=`, DELETE `/carts/{cartId}/items`, dan POST `/orders/{orderId}/cancel`. GET `/products` mendapat query parameter opsional `name`, `page`, `size`. `/api/v1` tetap didukung. Product V2 sudah diimplementasikan; status service lain diverifikasi oleh pemilik masing-masing.
-
-Base URL publik yang direncanakan adalah `http://localhost:8080/api/v1` dan `http://localhost:8080/api/v2` melalui pintu masuk API. Saat gateway belum berjalan, gunakan port service masing-masing. Dalam Kubernetes, aplikasi dapat memakai port container 8080 pada Pod berbeda.
+Base URL publik melalui Istio Ingress Gateway adalah `http://127.0.0.1:18080/api/v1` dan `http://127.0.0.1:18080/api/v2`. Saat menjalankan service langsung di host tanpa gateway, gunakan port masing-masing (`8081–8084`).
 
 ## Database per service
 
-Product menggunakan soft delete sesuai DEC-011: data terakhir tetap di tabel `products` dengan `active=false`, sementara lookup/list katalog hanya membaca produk aktif. Ini tidak menyediakan audit seluruh perubahan atau endpoint history. Migrasi V2 menambahkan status aktif tanpa mengubah migrasi V1. Implementasi HTTP masih dikerjakan bertahap.
+Product menggunakan soft delete sesuai DEC-011: data tetap tersimpan di tabel `products` dengan `active=false`, sementara lookup/list katalog hanya membaca produk aktif.
 
 ```text
 product-service → product_db
@@ -73,18 +73,16 @@ order-service   → order_db
 payment-service → payment_db
 ```
 
-Tiap service menguasai data dan kredensialnya sendiri. Relasi lokal seperti Cart–CartItem atau Order–OrderItem dapat memakai foreign key. Referensi productId/orderId lintas layanan tidak dibuat sebagai JOIN atau foreign key lintas database.
+Tiap service menguasai data dan kredensialnya sendiri. Relasi lokal seperti Cart–CartItem atau Order–OrderItem memakai foreign key internal, sedangkan referensi `productId`/`orderId` lintas layanan tidak dibuat sebagai JOIN atau foreign key lintas database.
 
-Model tabel bisnis berikut masih perlu diwujudkan melalui migrasi dan entity:
-
-| Database | Tabel yang direncanakan |
+| Database | Tabel utama |
 |---|---|
-| product_db | products |
-| cart_db | carts, cart_items |
-| order_db | orders, order_items untuk rancangan snapshot |
-| payment_db | payments |
+| `product_db` | `products` |
+| `cart_db` | `carts`, `cart_items` |
+| `order_db` | `orders`, `order_items` |
+| `payment_db` | `payments` |
 
-Skema internal tersebut masih perlu diwujudkan melalui migrasi dan mapping entity. Detail version, timestamp, constraint, retention, dan payment attempt harus mengikuti [keputusan desain](docs/architecture/decisions.md).
+Detail version, timestamp, constraint, dan idempotency mengikuti [keputusan desain](docs/architecture/decisions.md).
 
 ## Konsep integrasi
 
@@ -115,7 +113,8 @@ ABL-Project/
 │   ├── product-service/
 │   ├── cart-service/
 │   ├── order-service/
-│   └── payment-service/
+│   ├── payment-service/
+│   └── security-support/
 ├── specs/
 │   ├── openapi.yaml
 │   ├── openapi-v2.yaml
@@ -125,12 +124,44 @@ ABL-Project/
 │   ├── guides/
 │   ├── testing/
 │   └── archive/
-├── deploy/              # Helm umbrella chart, values, stage overrides, & k8s manifests
-├── scripts/             # Otomatisasi deploy-local.sh & tooling
-└── tests/               # Pengujian skrip, integrasi e2e, security mesh, resilience, & load
+├── deploy/              # Helm umbrella chart, Istio mesh, Keycloak (auth/), & k8s DB manifests
+├── scripts/             # Otomatisasi deploy-local.sh, auth-local.sh, auth-token.py, run-local-service.sh
+└── tests/               # Pengujian functional, integration, security, resilience, load (k6), & scripts
 ```
 
-Lihat [architecture.md](docs/architecture/architecture.md) untuk struktur internal tiap module. Tree merupakan struktur tujuan; direktori yang ada belum membuktikan implementasi atau konfigurasi sudah lengkap.
+Lihat [architecture.md](docs/architecture/architecture.md) untuk struktur internal tiap module.
+
+## Quick start Minikube + Istio + Keycloak
+
+Prasyarat di WSL2/Linux: **Docker (Linux containers)**, **Minikube**, **Helm 3**, **istioctl**, **Python 3**, dan **openssl**.
+
+```bash
+# 1. Inisialisasi cluster Minikube, Istio control plane, dan namespace ecommerce
+bash scripts/deploy-local.sh init
+
+# 2. Pasang Keycloak (namespace identity) dan buka port-forward di terminal terpisah (18090)
+bash scripts/auth-local.sh up
+bash scripts/auth-local.sh gateway
+```
+
+Pada terminal utama baru (biarkan `auth-local.sh gateway` tetap berjalan):
+
+```bash
+# 3. Build 4 image service, deploy 4 PostgreSQL StatefulSet, Helm chart, dan Istio Gateway
+bash scripts/deploy-local.sh up payment
+
+# 4. Buka Istio Ingress Gateway di port 18080 (terminal terpisah)
+bash scripts/deploy-local.sh gateway
+```
+
+Verifikasi cluster dan smoke check melalui gateway:
+
+```bash
+bash scripts/deploy-local.sh status
+AUTH_TOKEN=$(python3 scripts/auth-token.py api-admin) bash scripts/deploy-local.sh check
+```
+
+Untuk deployment per tahap (`product`, `cart`, `order`, `payment`), opsi `--only=<service>`, atau `--skip-build`, lihat [deploy/README.md](deploy/README.md).
 
 ## Persiapan development
 
@@ -250,8 +281,8 @@ URL client antarlayanan juga perlu dikonfigurasi pada consumer; lihat [konfigura
 
 | Versi | Prefix | Kontrak | Status |
 |---|---|---|---|
-| 1.0.0 | `/api/v1` | [specs/openapi.yaml](specs/openapi.yaml) | Diimplementasikan; dibekukan dan tetap didukung |
-| 2.0.0 | `/api/v2` | [specs/openapi-v2.yaml](specs/openapi-v2.yaml) | Product sudah diimplementasikan dan diuji; lihat status tiap service |
+| 1.0.0 | `/api/v1` | [specs/openapi.yaml](specs/openapi.yaml) | Diimplementasikan dan tetap didukung |
+| 2.0.0 | `/api/v2` | [specs/openapi-v2.yaml](specs/openapi-v2.yaml) | Diimplementasikan dan diuji pada seluruh 4 service |
 
 Buka file tersebut pada Swagger Editor/validator yang dipakai tim untuk memeriksa struktur endpoint dan schema. Ringkasan perubahan 1.0.0 → 2.0.0 ada pada `info.description` kontrak v2 dan [DEC-020–DEC-023](docs/architecture/decisions.md#dec-020-api-versi-200-dengan-url-path-versioning).
 
@@ -261,121 +292,131 @@ Beberapa bagian kontrak API masih perlu dilengkapi, terutama content respons tam
 
 ## Flow pengujian alur utama
 
-**Prasyarat:** endpoint bisnis terkait sudah dibuat, database tersedia, dan dependency URL benar. customerId 101 berikut hanya referensi pelanggan untuk pengujian, bukan akun atau bukti identitas terautentikasi. Cart dibuat melalui POST `/carts` sesuai perluasan kontrak OPEN-001.
+**Prasyarat:** Minikube + Istio Gateway (`18080`) dan Keycloak (`18090`) sudah berjalan. Mutasi Product membutuhkan role `ADMIN`, sedangkan Cart/Order/Payment menggunakan token `CUSTOMER` (`customer-a` memiliki `customer_id=101`) serta header `Idempotency-Key` pada `POST /payments`.
 
-Jalankan dari terminal pengujian dengan `curl` dan `jq`. Semua contoh respons/status di bagian ini merupakan hasil yang diharapkan untuk fixture yang sesuai, bukan hasil pengukuran.
+Jalankan dari terminal pengujian dengan `curl` dan `jq`:
 
-### 1. Tambahkan produk
+### 1. Ambil token dan tambahkan produk (`ADMIN`)
 
 ```bash
-PRODUCT_URL='http://localhost:8081/api/v1'
-CART_URL='http://localhost:8082/api/v1'
-ORDER_URL='http://localhost:8083/api/v1'
-PAYMENT_URL='http://localhost:8084/api/v1'
+BASE_URL='http://127.0.0.1:18080/api/v1'
+ADMIN_TOKEN=$(python3 scripts/auth-token.py api-admin)
+CUSTOMER_TOKEN=$(python3 scripts/auth-token.py customer-a)
 
 PRODUCT_JSON=$(curl --fail --silent --show-error \
-  -X POST "$PRODUCT_URL/products" \
+  -X POST "$BASE_URL/products" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"name":"Keyboard Mechanical","price":350000,"stock":20}')
 printf '%s\n' "$PRODUCT_JSON" | jq
 PRODUCT_ID=$(printf '%s\n' "$PRODUCT_JSON" | jq -er '.id')
 ```
 
-Target HTTP: **201**, respons Product dengan ID dari server. Jangan mengharuskan ID selalu 1.
+Target HTTP: **201**, respons Product dengan ID dari server.
 
 ### 2. Baca produk yang baru dibuat
 
 ```bash
 curl --fail --silent --show-error \
-  "$PRODUCT_URL/products/$PRODUCT_ID" | jq
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
+  "$BASE_URL/products/$PRODUCT_ID" | jq
 ```
 
 Target HTTP: **200**, atribut produk sesuai data yang disimpan.
 
-### 3. Buat Cart kosong, lalu tambahkan item
-
-Ambil ID Cart dari respons create, kemudian gunakan untuk operasi item:
+### 3. Buat Cart kosong, lalu tambahkan item (`CUSTOMER`)
 
 ```bash
 CART_JSON=$(curl --fail --silent --show-error \
-  -X POST "$CART_URL/carts" \
+  -X POST "$BASE_URL/carts" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"customerId":101}')
 printf '%s\n' "$CART_JSON" | jq
 CART_ID=$(printf '%s\n' "$CART_JSON" | jq -er '.id')
+
 curl --fail --silent --show-error \
-  -X POST "$CART_URL/carts/$CART_ID/items" \
+  -X POST "$BASE_URL/carts/$CART_ID/items" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
   -H 'Content-Type: application/json' \
   --data "{\"productId\":$PRODUCT_ID,\"quantity\":2}" | jq
 ```
 
-Target HTTP: **201** untuk create Cart (items kosong, total 0) dan tambah item. Satu item quantity 2 dengan harga tersimpan 350000 menghasilkan subtotal/total 700000. POST produk yang sama menambah quantity pada item yang sama. Penambahan item tidak otomatis membuktikan stok telah direservasi.
+Target HTTP: **201** untuk create Cart dan tambah item (subtotal/total 700000).
 
-### 4. Buat pesanan
+### 4. Buat pesanan (`CUSTOMER`)
 
 ```bash
 ORDER_JSON=$(curl --fail --silent --show-error \
-  -X POST "$ORDER_URL/orders" \
+  -X POST "$BASE_URL/orders" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
   -H 'Content-Type: application/json' \
   --data "{\"cartId\":$CART_ID,\"customerId\":101}")
 printf '%s\n' "$ORDER_JSON" | jq
 ORDER_ID=$(printf '%s\n' "$ORDER_JSON" | jq -er '.id')
 ```
 
-Target HTTP: **201**, Order dengan total sesuai policy checkout dan status awal sesuai keputusan implementasi yang disepakati.
+Target HTTP: **201**, Order dengan status awal `PENDING`.
 
-### 5. Buat permintaan pembayaran
+### 5. Buat permintaan pembayaran (`CUSTOMER` + `Idempotency-Key`)
 
 ```bash
 PAYMENT_JSON=$(curl --fail --silent --show-error \
-  -X POST "$PAYMENT_URL/payments" \
+  -X POST "$BASE_URL/payments" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
+  -H "Idempotency-Key: demo-pay-$ORDER_ID" \
   -H 'Content-Type: application/json' \
   --data "{\"orderId\":$ORDER_ID,\"method\":\"E_WALLET\"}")
 printf '%s\n' "$PAYMENT_JSON" | jq
 PAYMENT_ID=$(printf '%s\n' "$PAYMENT_JSON" | jq -er '.id')
 ```
 
-Target HTTP: **201**, Payment dengan method yang valid dan amount sesuai aturan backend. Rancangan project mengambil amount dari Order. Contoh PENDING adalah permintaan yang belum diverifikasi, bukan bukti transfer uang berhasil.
+Target HTTP: **201**, Payment dengan status `PENDING`.
 
 ### 6. Baca Order dan Payment
 
 ```bash
-curl --fail --silent --show-error "$ORDER_URL/orders/$ORDER_ID" | jq
-curl --fail --silent --show-error "$PAYMENT_URL/payments/$PAYMENT_ID" | jq
+curl --fail --silent --show-error -H "Authorization: Bearer $CUSTOMER_TOKEN" "$BASE_URL/orders/$ORDER_ID" | jq
+curl --fail --silent --show-error -H "Authorization: Bearer $CUSTOMER_TOKEN" "$BASE_URL/payments/$PAYMENT_ID" | jq
 ```
 
-Target HTTP: **200** untuk resource yang sudah dibuat. Gunakan ID aktual yang diperoleh dari respons create.
+Target HTTP: **200** untuk resource yang sudah dibuat.
 
 ## Flow pengujian perubahan data
 
-Jalankan pada fixture/state yang mengizinkan perubahan. Contoh memakai variabel dari alur utama:
+Contoh memakai variabel dan token dari alur utama:
 
 ```bash
-curl -i -X PATCH "$PRODUCT_URL/products/$PRODUCT_ID" \
+curl -i -X PATCH "$BASE_URL/products/$PRODUCT_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"price":375000}'
 
-curl -i -X PUT "$CART_URL/carts/$CART_ID/items/$PRODUCT_ID" \
+curl -i -X PUT "$BASE_URL/carts/$CART_ID/items/$PRODUCT_ID" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"quantity":3}'
 
-curl -i -X PATCH "$ORDER_URL/orders/$ORDER_ID" \
+curl -i -X PATCH "$BASE_URL/orders/$ORDER_ID" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"shippingAddress":"Jl. Veteran No. 10, Malang"}'
 
-curl -i -X PATCH "$PAYMENT_URL/payments/$PAYMENT_ID" \
+curl -i -X PATCH "$BASE_URL/payments/$PAYMENT_ID" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"transactionReference":"TRX-2026-0001"}'
 ```
 
-Target HTTP: **200** jika aturan resource mengizinkan. PATCH alamat/reference dapat menghasilkan **409** bila state transaksi menolak perubahan. Perubahan harga Product setelah create Order tidak seharusnya mengubah snapshot riwayat Order bila rancangan snapshot diterapkan.
+Target HTTP: **200** jika aturan resource mengizinkan.
 
 ## Flow pengujian gagal
 
 ### 1. Harga/stok Product tidak valid
 
 ```bash
-curl -i -X POST "$PRODUCT_URL/products" \
+curl -i -X POST "$BASE_URL/products" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"name":"Produk Uji","price":-1,"stock":-1}'
 ```
@@ -385,7 +426,8 @@ Target HTTP: **400**. Harga dan stok negatif melanggar schema input API.
 ### 2. Quantity Cart tidak valid
 
 ```bash
-curl -i -X POST "$CART_URL/carts/$CART_ID/items" \
+curl -i -X POST "$BASE_URL/carts/$CART_ID/items" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
   -H 'Content-Type: application/json' \
   --data "{\"productId\":$PRODUCT_ID,\"quantity\":0}"
 ```
@@ -394,29 +436,32 @@ Target HTTP: **400**. Quantity input minimal 1.
 
 ### 3. Quantity update melebihi stok
 
-Pada fixture Product dengan stok 20 dan Cart/item yang masih dapat diubah:
+Pada fixture Product dengan stok 20:
 
 ```bash
-curl -i -X PUT "$CART_URL/carts/$CART_ID/items/$PRODUCT_ID" \
+curl -i -X PUT "$BASE_URL/carts/$CART_ID/items/$PRODUCT_ID" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"quantity":21}'
 ```
 
-Target HTTP: **409** untuk kondisi quantity melebihi stok. Jika state Cart sudah berubah, siapkan fixture terpisah agar penyebab kegagalan dapat dibedakan.
+Target HTTP: **409** untuk kondisi quantity melebihi stok.
 
 ### 4. Method pembayaran tidak valid
 
 ```bash
-curl -i -X POST "$PAYMENT_URL/payments" \
+curl -i -X POST "$BASE_URL/payments" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
+  -H "Idempotency-Key: demo-invalid-$ORDER_ID" \
   -H 'Content-Type: application/json' \
   --data "{\"orderId\":$ORDER_ID,\"method\":\"UNKNOWN\"}"
 ```
 
-Target HTTP: **400**. Method yang diizinkan adalah TRANSFER, E_WALLET, dan COD.
+Target HTTP: **400**. Method yang diizinkan adalah `TRANSFER`, `E_WALLET`, `COD`, dan `VA_BCA` (lihat kontrak OpenAPI).
 
 ### 5. Resource tidak ditemukan dan operasi DELETE
 
-Gunakan identifier fixture yang dipastikan tidak ada untuk menguji **404** pada GET detail. Untuk DELETE yang diizinkan, periksa **204 tanpa body**; Product dapat menghasilkan 409 jika policy penghapusan menolak keterkaitannya. PUT/DELETE Order dan Payment tidak termasuk kontrak awal.
+Gunakan ID yang tidak ada untuk menguji **404**. Operasi `DELETE` yang diizinkan mengembalikan **204 tanpa body** (`DELETE /products/{id}` dengan `ADMIN_TOKEN`, atau `DELETE /carts/{cartId}/items/{productId}` dengan `CUSTOMER_TOKEN`). Request tanpa token mengembalikan **401**, sedangkan akses lintas `customer_id` atau role yang tidak sesuai mengembalikan **403**.
 
 Error JSON menggunakan atribut `code` dan `message`. Contoh:
 
@@ -431,47 +476,36 @@ Rincian whitelist PATCH, null semantics, dan error dependency perlu diselaraskan
 
 ## Pengujian dan bukti demo
 
-Setelah datasource/profile pengujian siap:
+Menjalankan seluruh unit test dan integration test Java (Testcontainers PostgreSQL 17):
 
 ```bash
-./mvnw -pl services/product-service -am test
-./mvnw verify
+./mvnw -B -ntp verify
 ```
 
-Keberhasilan command dengan nol tests tidak membuktikan fitur telah diuji. Integration tests hanya dijalankan otomatis jika lifecycle/plugin-nya dikonfigurasi. Lihat [testing.md](docs/testing/testing.md) untuk matriks 18 operasi v1, tambahan v2, dan pencatatan hasil.
+Untuk menjalankan suite pengujian otomatis pada direktori `tests/` (`functional/`, `integration/`, `security/`, `resilience/`, `load/`, dan `scripts/`), lihat panduan lengkap di [tests/README.md](tests/README.md).
 
-Bukti demo yang dapat dikumpulkan setelah implementasi tersedia:
-
-1. Versi Java/Maven dan hasil build/test yang benar-benar dijalankan.
-2. Kesiapan container/database sesuai environment.
-3. Respons create/read/update/delete beserta status HTTP aktual.
-4. Skenario validasi dan konflik yang ditolak.
-5. Log aplikasi yang membantu menelusuri request tanpa password/token.
-6. Data database sebelum/sesudah operasi yang diuji.
-
-Tidak ada format console log khusus atau Swagger screenshot yang diasumsikan sudah diimplementasikan. Load test dikerjakan setelah endpoint stabil dengan dataset/resource/skenario yang dicatat.
-
-## Status dan pekerjaan berikutnya
-
-Status pengembangan dan verifikasi:
+## Status implementasi dan verifikasi
 
 | Bagian | Status |
 |---|---|
-| Empat skeleton Initializr dan parent/module Maven | Tersedia; `validate` & build berhasil |
+| Multi-module Maven (`security-support` + 4 services) | Tersedia; `./mvnw -B -ntp verify` lulus pada seluruh 5 modul |
 | Struktur package domain/usecase/adapter (Hexagonal) | Terimplementasi penuh pada seluruh 4 service |
-| Kontrak OpenAPI v1 & v2 | Diimplementasikan dan divalidasi dengan Swagger/OpenAPI validator |
+| Kontrak OpenAPI v1 & v2 | Diimplementasikan dan terverifikasi pada seluruh 4 service |
+| Keamanan aplikasi (Keycloak + JWT RS256 + ownership + token relay) | Terimplementasi via `security-support` dan terverifikasi oleh `tests/security/jwt-e2e.py` |
 | Docker multi-stage build | 4 Dockerfile teruji dan dimuat ke image Minikube |
-| Database dan endpoint bisnis | Keempat service lulus tests PostgreSQL Testcontainers terisolasi & integrasi HTTP |
-| Cluster/deployment Minikube & Istio | Helm umbrella chart teruji di Minikube WSL2: mTLS `STRICT`, L7 RBAC, Outlier Detection CB, Gateway 18080 |
-| Tests bisnis, keamanan, dan pengujian beban | Total 778 tests Maven lulus (`Product`: 136, `Cart`: 108, `Order`: 141, `Payment`: 393); skenario cluster otomatis di `tests/` siap |
+| Cluster/deployment Minikube & Istio | Helm umbrella chart teruji di Minikube WSL2: mTLS `STRICT`, L7 RBAC, Outlier Detection CB, Gateway `18080` |
+| Automated test suites (`tests/`) | Functional v2, Integration E2E & negative, Security Mesh & JWT, Resilience rollout & failover, Load k6, & Script regression |
 
 ## Dokumentasi lanjutan
 
+- [Deploy Minikube & Istio](deploy/README.md): langkah `deploy-local.sh init`, `up`, `status`, `gateway`, dan `check`.
+- [Panduan JWT & Keycloak](docs/guides/jwt-authentication.md): setup `auth-local.sh`, role `ADMIN`/`CUSTOMER`, kepemilikan `customer_id`, dan token relay.
+- [Panduan Suite Pengujian](tests/README.md): cara menjalankan seluruh suite di `tests/`.
 - [Architecture](docs/architecture/architecture.md): pola arsitektur, tanggung jawab layer, dan alur data.
-- [Business rules](docs/architecture/business-rules.md): aturan bisnis dan bagian kontrak yang perlu dilengkapi.
-- [Development](docs/guides/development.md): environment, database, migrasi, dan startup lokal.
-- [Testing](docs/testing/testing.md): skenario serta format hasil pengujian.
-- [Decisions](docs/architecture/decisions.md): keputusan yang sudah dipilih dan yang masih terbuka.
+- [Business rules](docs/architecture/business-rules.md): aturan bisnis dan batasan kontrak.
+- [Development](docs/guides/development.md): environment, database, migrasi, dan startup lokal tanpa Kubernetes.
+- [Testing](docs/testing/testing.md): matriks operasi dan pencatatan hasil pengujian.
+- [Decisions](docs/architecture/decisions.md): keputusan arsitektur dan kontrak API.
 
 Contoh ID dan nominal pada panduan ini adalah ilustrasi. Sesuaikan dengan fixture dan gunakan identifier yang dikembalikan aplikasi saat menjalankan pengujian.
 
