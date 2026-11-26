@@ -55,12 +55,17 @@ pass "Restored Cart to $original_replicas ready replicas"
 
 jwt_refresh customer
 
-# 4. Verify recovery (200 OK)
+# 4. Verify recovery (200 OK); retry briefly while Istio gateway syncs the new pod endpoint.
 cart_body=$(mktemp)
-cart_create_status=$(curl -sS -H "Authorization: Bearer $CUSTOMER_TOKEN" -o "$cart_body" -w '%{http_code}' -X POST \
-  -H 'Content-Type: application/json' \
-  -d "{\"customerId\":$CUSTOMER_ID}" \
-  "$BASE_URL/api/v1/carts")
+cart_create_status=''
+for _ in {1..15}; do
+  cart_create_status=$(curl -sS -H "Authorization: Bearer $CUSTOMER_TOKEN" -o "$cart_body" -w '%{http_code}' -X POST \
+    -H 'Content-Type: application/json' \
+    -d "{\"customerId\":$CUSTOMER_ID}" \
+    "$BASE_URL/api/v1/carts" || echo "000")
+  [[ "$cart_create_status" != "503" && "$cart_create_status" != "000" ]] && break
+  sleep 1
+done
 [[ "$cart_create_status" == "201" ]] || { rm -f "$cart_body"; fail "Expected 201 on cart recovery, got $cart_create_status"; }
 cart_id=$(sed -n 's/.*"id"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$cart_body" | head -n1)
 rm -f "$cart_body"
